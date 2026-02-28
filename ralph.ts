@@ -11,7 +11,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from "fs
 import { join } from "path";
 import { checkTerminalPromise, stripAnsi, tasksMarkdownAllComplete } from "./completion";
 
-const VERSION = "1.2.2";
+const VERSION = "1.2.3";
 
 // Detect Windows platform for command resolution
 const IS_WINDOWS = process.platform === "win32";
