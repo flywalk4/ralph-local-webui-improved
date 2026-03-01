@@ -943,6 +943,44 @@ const GLOBAL_CSS = `
     padding: 6px 0;
   }
 
+  /* ── Project info card ───────────────────────────────────────── */
+  .project-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .project-card-loading { color: var(--text-muted); font-size: 12px; margin: 0; }
+  .project-info-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .project-name { font-weight: 600; color: var(--text); font-size: 14px; }
+  .project-version { font-size: 11px; color: var(--text-muted); background: var(--surface-3); padding: 1px 6px; border-radius: 10px; }
+  .project-desc { color: var(--text-muted); font-size: 12px; margin: 4px 0 0; }
+  .project-last-run {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-sub);
+  }
+  .project-last-prompt {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--surface-3);
+    border-radius: 6px;
+    padding: 7px 10px;
+    margin-top: 6px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
   /* ── Directory browser modal ─────────────────────────────────── */
   .dir-modal-overlay {
     display: none;
@@ -1309,6 +1347,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
               <button type="button" class="btn btn-ghost btn-sm" onclick="openDirModal()"
                 title="Browse for a directory">📁 Browse</button>
             </div>
+            <div id="project-card" style="display:none" class="project-card"></div>
           </div>
         </div>
       </div>
@@ -1354,6 +1393,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
             const data = await resp.json();
             if (data.path) {
               document.getElementById('cwd').value = data.path;
+              loadProjectInfo(data.path);
             }
             // if cancelled, do nothing
           } catch (e) {
@@ -1374,6 +1414,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
       function selectCurrentDir() {
         document.getElementById('cwd').value = currentBrowsePath;
         closeDirModal();
+        loadProjectInfo(currentBrowsePath);
       }
       async function browseTo(path) {
         const pathEl = document.getElementById('dir-current-path');
@@ -1468,6 +1509,74 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
           }
         }
       });
+
+      // ── Project info card ─────────────────────────────────────────
+      let _projInfoTimer = null;
+      document.getElementById('cwd').addEventListener('input', function() {
+        clearTimeout(_projInfoTimer);
+        _projInfoTimer = setTimeout(() => loadProjectInfo(this.value.trim()), 700);
+      });
+
+      async function loadProjectInfo(path) {
+        if (!path) return;
+        const card = document.getElementById('project-card');
+        card.style.display = 'block';
+        card.innerHTML = '<p class="project-card-loading">⏳ Loading project info…</p>';
+        try {
+          const resp = await fetch('/api/project-info?cwd=' + encodeURIComponent(path));
+          const d = await resp.json();
+          if (d.error) { card.innerHTML = '<p class="project-card-loading" style="color:var(--text-muted)">⚠ ' + esc(d.error) + '</p>'; return; }
+          let html = '<div class="project-info-header">'
+            + '<span class="project-name">' + esc(d.name) + '</span>';
+          if (d.version) html += '<span class="project-version">v' + esc(d.version) + '</span>';
+          if (d.gitBranch) html += '<span class="badge badge-gray" style="font-size:10px">⎇ ' + esc(d.gitBranch) + '</span>';
+          if (d.hasPlan)     html += '<span class="badge badge-blue" style="font-size:10px">📋 Plan</span>';
+          if (d.hasActivity) html += '<span class="badge badge-blue" style="font-size:10px">📝 Activity</span>';
+          html += '</div>';
+          if (d.description) html += '<p class="project-desc">' + esc(d.description) + '</p>';
+          if (d.lastRun) {
+            const ago = d.lastRun.startedAt ? timeAgo(new Date(d.lastRun.startedAt)) : '';
+            html += '<div class="project-last-run">'
+              + '<span style="font-size:11px;color:var(--text-muted)">Last run' + (ago ? ' · ' + ago : '') + ':</span>'
+              + ' <strong style="font-size:11px">' + esc(d.lastRun.agent || '?') + '</strong>'
+              + (d.lastRun.iteration ? ' · <span style="font-size:11px">' + d.lastRun.iteration + ' iterations</span>' : '');
+            if (d.lastRun.prompt) {
+              const p = String(d.lastRun.prompt);
+              html += '<div class="project-last-prompt">' + esc(p.substring(0, 140)) + (p.length > 140 ? '…' : '') + '</div>'
+                + '<button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" '
+                + 'onclick="resumeLastRun(' + JSON.stringify(p) + ')">↩ Resume last run</button>';
+            }
+            html += '</div>';
+          } else {
+            html += '<p class="project-desc" style="margin-top:6px">No previous runs in this directory.</p>';
+          }
+          html += '<p style="font-size:11px;color:var(--text-muted);margin-top:8px">📄 Project summary saved to <code>.ralph/project-summary.md</code></p>';
+          card.innerHTML = html;
+        } catch (e) {
+          card.style.display = 'none';
+        }
+      }
+
+      function resumeLastRun(prompt) {
+        document.getElementById('prompt').value = prompt;
+        document.getElementById('prompt').focus();
+        document.getElementById('prompt').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      function timeAgo(date) {
+        const s = Math.floor((Date.now() - date.getTime()) / 1000);
+        if (s < 60) return s + 's ago';
+        if (s < 3600) return Math.floor(s / 60) + 'm ago';
+        if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+        return Math.floor(s / 86400) + 'd ago';
+      }
+
+      function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+
+      // Load project info on initial page load
+      loadProjectInfo(initialCwd);
     </script>
   `, "/launch", "", state);
 }
@@ -1539,6 +1648,18 @@ function routeStatus(cwd: string): string {
 
   const extraHead = isActive
     ? `<script>
+        // Request notification permission early
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+        function notifyDone(iterations) {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Ralph Wiggum — Loop complete', {
+              body: 'Finished after ' + iterations + ' iteration' + (iterations !== 1 ? 's' : '') + '.',
+              icon: '/logo.png',
+            });
+          }
+        }
         setInterval(async () => {
           try {
             const r = await fetch('/api/status');
@@ -1549,9 +1670,10 @@ function routeStatus(cwd: string): string {
               dot.className = s.active ? 'status-dot active' : 'status-dot';
               dot.title = s.active ? 'Active — iteration ' + (s.iteration ?? '?') : 'No active loop';
             }
-            // If no longer active, stop polling and refresh page
-            if (!s.active) { window.location.reload(); }
-            else {
+            if (!s.active) {
+              notifyDone(s.iteration ?? 0);
+              window.location.reload();
+            } else {
               const itEl = document.getElementById('iter-display');
               if (itEl) itEl.textContent = (s.iteration ?? '?') + (s.maxIterations ? ' / ' + s.maxIterations : ' (unlimited)');
             }
@@ -1699,6 +1821,18 @@ function routeActivity(cwd: string): string {
   const isActive = state?.active === true;
 
   const extraHead = isActive ? `<script>
+    // Request notification permission early
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+    function notifyDone(iterations) {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Ralph Wiggum — Loop complete', {
+          body: 'Finished after ' + iterations + ' iteration' + (iterations !== 1 ? 's' : '') + '.',
+          icon: '/logo.png',
+        });
+      }
+    }
     let lastRev = '';
     setInterval(async () => {
       try {
@@ -1761,8 +1895,11 @@ function routeActivity(cwd: string): string {
           }
         }
 
-        // If loop ended, stop polling
-        if (!d.state?.active) location.reload();
+        // If loop ended, notify and reload
+        if (!d.state?.active) {
+          notifyDone(d.state?.iteration ?? 0);
+          location.reload();
+        }
       } catch {}
     }, 3000);
 
@@ -2112,6 +2249,113 @@ function routeApiConsoleLog(cwd: string): Response {
   return new Response(content, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
 
+// ─── Route: GET /api/project-info ────────────────────────────────────────────
+
+/** Generate (or load) a human-readable project summary at .ralph/project-summary.md */
+function generateProjectSummary(cwd: string): void {
+  const summaryFile = join(stateDir(cwd), "project-summary.md");
+  // Gather project metadata
+  const dirName = cwd.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? cwd;
+  let name = dirName, version = "", description = "";
+  const pkgPath = join(cwd, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSafe(pkgPath));
+      name = pkg.name ?? dirName;
+      version = pkg.version ?? "";
+      description = pkg.description ?? "";
+    } catch {}
+  }
+  // README excerpt
+  let readmeExcerpt = "";
+  const readmePath = join(cwd, "README.md");
+  if (existsSync(readmePath)) readmeExcerpt = readFileSafe(readmePath).substring(0, 700).trim();
+  // Git info
+  let gitBranch = "", gitLog = "";
+  try {
+    const br = Bun.spawnSync(["git", "branch", "--show-current"], { cwd, stdout: "pipe", stderr: "ignore" });
+    gitBranch = new TextDecoder().decode(br.stdout).trim();
+    const lg = Bun.spawnSync(["git", "log", "--oneline", "-5"], { cwd, stdout: "pipe", stderr: "ignore" });
+    gitLog = new TextDecoder().decode(lg.stdout).trim();
+  } catch {}
+  // Key files (top-level, non-hidden)
+  let keyFiles: string[] = [];
+  try {
+    keyFiles = readdirSync(cwd, { withFileTypes: true })
+      .filter(e => e.isFile() && !e.name.startsWith("."))
+      .map(e => e.name).slice(0, 20);
+  } catch {}
+
+  const lines: string[] = [
+    `# Project: ${name}`, "",
+    `**Path:** \`${cwd}\``,
+    version     ? `**Version:** ${version}`      : "",
+    description ? `**Description:** ${description}` : "",
+    "",
+  ];
+  if (gitBranch || gitLog) {
+    lines.push("## Git");
+    if (gitBranch) lines.push(`**Branch:** ${gitBranch}`, "");
+    if (gitLog) {
+      lines.push("**Recent commits:**");
+      gitLog.split("\n").forEach(l => lines.push(`- ${l}`));
+      lines.push("");
+    }
+  }
+  if (keyFiles.length) {
+    lines.push("## Key Files");
+    keyFiles.forEach(f => lines.push(`- ${f}`));
+    lines.push("");
+  }
+  if (readmeExcerpt) {
+    lines.push("## README Excerpt", "");
+    lines.push(readmeExcerpt);
+    if (readmeExcerpt.length >= 700) lines.push("…");
+    lines.push("");
+  }
+  mkdirSync(stateDir(cwd), { recursive: true });
+  writeFileSync(summaryFile, lines.filter(l => l !== undefined).join("\n"), "utf-8");
+}
+
+async function routeApiProjectInfo(req: Request): Promise<Response> {
+  const cwd = decodeURIComponent(new URL(req.url).searchParams.get("cwd") ?? "").trim();
+  if (!cwd) return new Response(JSON.stringify({ error: "cwd required" }), { headers: { "Content-Type": "application/json" } });
+  if (!existsSync(cwd)) return new Response(JSON.stringify({ error: "Directory not found" }), { headers: { "Content-Type": "application/json" } });
+
+  const dirName = cwd.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? cwd;
+  let name = dirName, version = "", description = "";
+  const pkgPath = join(cwd, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSafe(pkgPath));
+      name = pkg.name ?? dirName;
+      version = pkg.version ?? "";
+      description = pkg.description ?? "";
+    } catch {}
+  }
+  let gitBranch = "";
+  try {
+    const r = Bun.spawnSync(["git", "branch", "--show-current"], { cwd, stdout: "pipe", stderr: "ignore" });
+    gitBranch = new TextDecoder().decode(r.stdout).trim();
+  } catch {}
+
+  const state = loadState(cwd);
+  generateProjectSummary(cwd);
+
+  return new Response(JSON.stringify({
+    name, version, description, gitBranch,
+    lastRun: state ? {
+      iteration: state.iteration,
+      agent:     state.agent,
+      prompt:    state.prompt,
+      startedAt: state.startedAt,
+      active:    state.active,
+    } : null,
+    hasPlan:     existsSync(planPath(cwd)),
+    hasActivity: existsSync(activityPath(cwd)),
+  }), { headers: { "Content-Type": "application/json" } });
+}
+
 // ─── Route: GET /api/models ───────────────────────────────────────────────────
 
 async function routeApiModels(req: Request): Promise<Response> {
@@ -2185,6 +2429,7 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
       if (path === "/api/models")         return routeApiModels(req);
       if (path === "/api/browse")         return routeApiBrowse(req);
       if (path === "/api/browse-native")  return routeApiBrowseNative(cwd);
+      if (path === "/api/project-info")   return routeApiProjectInfo(req);
 
       return new Response("Not Found", { status: 404 });
     },
