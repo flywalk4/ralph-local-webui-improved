@@ -1355,9 +1355,16 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
       <div class="form-section">
         <div class="form-section-title">✏ Prompt</div>
         <div class="form-group">
-          <label for="prompt">Task description <span class="required" id="prompt-required">*</span><span id="prompt-optional" style="display:none;font-size:11px;color:var(--text-muted);font-weight:400"> (optional with --improving)</span></label>
+          <label for="prompt" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            Task description
+            <span class="required" id="prompt-required">*</span>
+            <span id="prompt-optional" style="display:none;font-size:11px;color:var(--text-muted);font-weight:400">(optional with --improving)</span>
+            <button type="button" id="enrich-btn" class="btn btn-ghost btn-sm" style="margin-left:auto"
+              onclick="enrichPrompt()" title="Enrich prompt using the selected model + project context">✨ Enrich</button>
+          </label>
           <textarea name="prompt" id="prompt" rows="6"
             placeholder="e.g. Fix the failing tests in tests/auth.test.ts and make sure all assertions pass"></textarea>
+          <div id="enrich-status" style="display:none;font-size:11px;margin-top:4px"></div>
         </div>
       </div>
 
@@ -1711,6 +1718,48 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
           btn.textContent = '↓ Models';
         } finally {
           btn.disabled = false;
+        }
+      }
+
+      // ── Prompt enrichment ─────────────────────────────────────────
+      async function enrichPrompt() {
+        const btn = document.getElementById('enrich-btn');
+        const status = document.getElementById('enrich-status');
+        const ta = document.getElementById('prompt');
+        const rawPrompt = ta.value.trim();
+        if (!rawPrompt) { ta.focus(); return; }
+
+        const baseUrl = document.getElementById('base-url').value.trim();
+        const model   = document.getElementById('model').value.trim();
+
+        btn.disabled = true;
+        btn.textContent = '⏳ Enriching…';
+        status.style.display = 'block';
+        status.style.color = 'var(--text-muted)';
+        status.textContent = 'Sending to LLM…';
+
+        try {
+          const resp = await fetch('/api/enrich-prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: rawPrompt, baseUrl: baseUrl || undefined, model: model || undefined }),
+          });
+          const d = await resp.json();
+          if (d.error) {
+            status.style.color = 'var(--danger)';
+            status.textContent = '✗ ' + d.error;
+          } else {
+            ta.value = d.prompt;
+            status.style.color = 'var(--success)';
+            status.textContent = '✓ Prompt enriched';
+            setTimeout(() => { status.style.display = 'none'; }, 3000);
+          }
+        } catch (e) {
+          status.style.color = 'var(--danger)';
+          status.textContent = '✗ Request failed: ' + e.message;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '✨ Enrich';
         }
       }
 
@@ -2731,6 +2780,133 @@ async function routeApiProjectInfo(req: Request): Promise<Response> {
   }), { headers: { "Content-Type": "application/json" } });
 }
 
+// ─── Route: POST /api/enrich-prompt ──────────────────────────────────────────
+
+/** Collect lightweight project context for prompt enrichment (not sent to user). */
+function buildEnrichmentContext(projectCwd: string): string {
+  const parts: string[] = [];
+
+  // package.json
+  const pkgPath = join(projectCwd, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSafe(pkgPath));
+      if (pkg.name)        parts.push(`Project: ${pkg.name}${pkg.version ? ` v${pkg.version}` : ""}`);
+      if (pkg.description) parts.push(`Description: ${pkg.description}`);
+      const deps = Object.keys({ ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) });
+      if (deps.length) parts.push(`Tech stack: ${deps.slice(0, 25).join(", ")}${deps.length > 25 ? "…" : ""}`);
+    } catch {}
+  }
+
+  // README first 25 lines
+  for (const name of ["README.md", "readme.md", "Readme.md"]) {
+    const rp = join(projectCwd, name);
+    if (existsSync(rp)) {
+      try {
+        const excerpt = readFileSafe(rp).split("\n").slice(0, 25).join("\n").trim();
+        if (excerpt) parts.push(`\nREADME (excerpt):\n${excerpt}`);
+      } catch {}
+      break;
+    }
+  }
+
+  // Top-level structure
+  try {
+    const skip = new Set(["node_modules", ".git", ".next", "dist", "build", "__pycache__", ".venv", "venv"]);
+    const entries = readdirSync(projectCwd, { withFileTypes: true })
+      .filter(e => !skip.has(e.name) && !e.name.startsWith("."))
+      .map(e => e.isDirectory() ? `${e.name}/` : e.name)
+      .slice(0, 30);
+    if (entries.length) parts.push(`\nProject files:\n${entries.join("\n")}`);
+  } catch {}
+
+  return parts.join("\n");
+}
+
+async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Response> {
+  let body: { prompt?: string; baseUrl?: string; model?: string } = {};
+  try { body = await req.json(); } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }
+
+  const rawPrompt = String(body.prompt ?? "").trim();
+  if (!rawPrompt) {
+    return new Response(JSON.stringify({ error: "prompt is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }
+
+  // Resolve API base
+  const baseUrl = String(body.baseUrl ?? "").trim().replace(/\/+$/, "");
+  let apiBase: string | null = null;
+  if (baseUrl) {
+    apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+  } else if (process.env.OPENAI_API_KEY) {
+    apiBase = "https://api.openai.com/v1";
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    // Use OpenAI-compatible proxy isn't available for Anthropic directly,
+    // but claude-code users likely have the key — fall through to error
+  }
+
+  if (!apiBase) {
+    return new Response(
+      JSON.stringify({ error: "No LLM API configured. Enter a Base URL (e.g. http://localhost:11434/v1) or set OPENAI_API_KEY." }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY ?? "local";
+  const model = String(body.model ?? "").trim() || (baseUrl ? undefined : "gpt-4o-mini");
+
+  const projectCwd = loadCurrentProject(serverCwd);
+  const context = buildEnrichmentContext(projectCwd);
+
+  const systemPrompt = `You are a software task specification assistant.
+
+Below is project context (for your understanding only — do NOT include it in the output):
+${context}
+
+Your job: rewrite the user's rough task description into a clear, specific, actionable task.
+Rules:
+- Return ONLY the improved task description as plain text — no preamble, no explanations, no project context
+- Be specific: reference the relevant files, functions, or components from the project context
+- Keep the same intent as the original
+- Use imperative mood ("Fix…", "Add…", "Refactor…")
+- 2–6 sentences is ideal`;
+
+  try {
+    const resp = await fetch(`${apiBase}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: model ?? "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: rawPrompt },
+        ],
+        max_tokens: 600,
+        temperature: 0.3,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      return new Response(JSON.stringify({ error: `LLM API error ${resp.status}: ${txt.slice(0, 200)}` }), {
+        status: 502, headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const data = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const enriched = data?.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!enriched) {
+      return new Response(JSON.stringify({ error: "Empty response from LLM" }), { status: 502, headers: { "Content-Type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify({ prompt: enriched }), { headers: { "Content-Type": "application/json" } });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: `Request failed: ${String(e)}` }), { status: 502, headers: { "Content-Type": "application/json" } });
+  }
+}
+
 // ─── Route: GET /api/models ───────────────────────────────────────────────────
 
 async function routeApiModels(req: Request): Promise<Response> {
@@ -2807,6 +2983,7 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
       if (path === "/api/browse")         return routeApiBrowse(req);
       if (path === "/api/browse-native")  return routeApiBrowseNative(cwd);
       if (path === "/api/project-info")   return routeApiProjectInfo(req);
+      if (path === "/api/enrich-prompt" && req.method === "POST") return routeApiEnrichPrompt(req, cwd);
 
       return new Response("Not Found", { status: 404 });
     },
