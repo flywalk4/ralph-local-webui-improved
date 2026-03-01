@@ -52,6 +52,38 @@ function lastNLines(text: string, n: number): string {
   return text.split("\n").slice(-n).join("\n");
 }
 
+/** Parse activity.md into sections [{heading, items[]}], newest first. */
+function parseActivityMd(content: string): Array<{ heading: string; items: string[] }> {
+  const sections: Array<{ heading: string; items: string[] }> = [];
+  let current: { heading: string; items: string[] } | null = null;
+  for (const line of content.split("\n")) {
+    const t = line.trim();
+    if (/^#{1,3} /.test(t)) {
+      if (current) sections.push(current);
+      current = { heading: t.replace(/^#+\s*/, ""), items: [] };
+    } else if (t.startsWith("- ") && current) {
+      current.items.push(t.slice(2));
+    } else if (t && current && !/^[-*_]{3,}$/.test(t)) {
+      current.items.push(t);
+    }
+  }
+  if (current) sections.push(current);
+  // newest first — last section (most recent iteration) goes to top
+  return sections.reverse();
+}
+
+/** Parse IMPLEMENTATION_PLAN.md checkboxes for progress. */
+function parsePlanProgress(content: string): { done: number; total: number; tasks: Array<{ text: string; done: boolean }> } {
+  const tasks: Array<{ text: string; done: boolean }> = [];
+  for (const line of content.split("\n")) {
+    const done = line.match(/[-*]\s+\[x\]\s+(.+)/i);
+    const todo = line.match(/[-*]\s+\[ \]\s+(.+)/);
+    if (done) tasks.push({ text: done[1].trim(), done: true });
+    else if (todo) tasks.push({ text: todo[1].trim(), done: false });
+  }
+  return { done: tasks.filter(t => t.done).length, total: tasks.length, tasks };
+}
+
 // ─── PID helpers ──────────────────────────────────────────────────────────────
 
 function storePid(serverCwd: string, pid: number, projectCwd: string): void {
@@ -717,6 +749,157 @@ const GLOBAL_CSS = `
   details summary { cursor: pointer; color: var(--text-muted); font-size: 12px; user-select: none; }
   details summary:hover { color: var(--text); }
 
+  /* ── Activity timeline ───────────────────────────────── */
+  .activity-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    font-size: 13px;
+  }
+  .activity-status-bar .sep { color: var(--border); }
+
+  .progress-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .progress-meta strong { color: var(--text); }
+  .progress-track {
+    height: 8px;
+    background: var(--surface-3);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--success) 100%);
+    transition: width 0.6s ease;
+    min-width: 2px;
+  }
+  .progress-tasks {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .progress-task {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    border: 1px solid var(--border-sub);
+    background: var(--surface-2);
+    color: var(--text-muted);
+  }
+  .progress-task.done { color: var(--success); background: var(--success-dim); border-color: #2a6030; }
+  .progress-task .task-icon { font-size: 10px; }
+
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+  .tl-item {
+    display: flex;
+    gap: 14px;
+    position: relative;
+  }
+  .tl-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 20px;
+  }
+  .tl-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--border);
+    border: 2px solid var(--surface);
+    flex-shrink: 0;
+    margin-top: 4px;
+    z-index: 1;
+    transition: background 0.3s;
+  }
+  .tl-dot.active {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .tl-dot.done { background: var(--accent); }
+  .tl-line {
+    width: 2px;
+    flex: 1;
+    background: var(--border-sub);
+    margin: 3px 0;
+    min-height: 16px;
+  }
+  .tl-body {
+    flex: 1;
+    padding-bottom: 20px;
+  }
+  .tl-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .tl-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .tl-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0;
+  }
+  .tl-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .tl-list li::before {
+    content: "›";
+    color: var(--accent);
+    font-size: 14px;
+    line-height: 1.3;
+    flex-shrink: 0;
+  }
+  .tl-para {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 3px 0;
+  }
+  .tl-empty {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: italic;
+    padding: 6px 0;
+  }
+
   /* ── Directory browser modal ─────────────────────────────────── */
   .dir-modal-overlay {
     display: none;
@@ -1372,32 +1555,170 @@ function routePlan(cwd: string): string {
 
 // ─── Route: Activity ─────────────────────────────────────────────────────────
 
+function buildActivityHtml(projectCwd: string, state: Record<string, unknown> | null): string {
+  const isActive = state?.active === true;
+  const iter = Number(state?.iteration ?? 0);
+  const maxIter = Number(state?.maxIterations ?? 0);
+  const agent = String(state?.agent ?? "");
+  const started = state?.startedAt ? String(state.startedAt) : "";
+  const elapsed = started
+    ? (() => {
+        const s = Math.floor((Date.now() - new Date(started).getTime()) / 1000);
+        return s > 3600 ? `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m` : `${Math.floor(s/60)}m ${s%60}s`;
+      })()
+    : "";
+
+  // ── Status bar ────────────────────────────────────────────────────────────
+  const statusBar = isActive ? `
+    <div class="activity-status-bar">
+      <span class="badge badge-green" id="act-status">● ACTIVE</span>
+      <span class="sep">|</span>
+      <span>Iteration <strong id="act-iter">${iter}</strong>${maxIter > 0 ? `&nbsp;/&nbsp;${maxIter}` : ""}</span>
+      <span class="sep">|</span>
+      <span>Agent: <strong>${escapeHtml(agent)}</strong></span>
+      ${elapsed ? `<span class="sep">|</span><span>Elapsed: <strong id="act-elapsed">${elapsed}</strong></span>` : ""}
+    </div>` : "";
+
+  // ── Progress bar from IMPLEMENTATION_PLAN.md ──────────────────────────────
+  const planContent = readFileSafe(planPath(projectCwd));
+  const progress = planContent ? parsePlanProgress(planContent) : null;
+  const progressHtml = progress && progress.total > 0 ? (() => {
+    const pct = Math.round((progress.done / progress.total) * 100);
+    // Show up to 8 tasks as chips, rest as "+N more"
+    const shown = progress.tasks.slice(0, 8);
+    const extra = progress.tasks.length - shown.length;
+    const chips = shown.map(t =>
+      `<span class="progress-task ${t.done ? "done" : ""}">
+         <span class="task-icon">${t.done ? "✓" : "○"}</span>
+         ${escapeHtml(t.text.substring(0, 40))}${t.text.length > 40 ? "…" : ""}
+       </span>`
+    ).join("");
+    return `
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-meta">
+        <span>Tasks complete: <strong id="prog-label">${progress.done} / ${progress.total}</strong></span>
+        <strong id="prog-pct">${pct}%</strong>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="prog-fill" style="width:${pct}%"></div>
+      </div>
+      <div class="progress-tasks" id="prog-tasks">
+        ${chips}
+        ${extra > 0 ? `<span class="progress-task">+${extra} more</span>` : ""}
+      </div>
+    </div>`;
+  })() : "";
+
+  // ── Timeline ──────────────────────────────────────────────────────────────
+  const actContent = readFileSafe(activityPath(projectCwd));
+  const sections = actContent ? parseActivityMd(actContent) : [];
+
+  const timelineHtml = sections.length === 0
+    ? `<p class="empty-state">No activity yet. Run ralph with <code>--plan</code> to generate an activity log.</p>`
+    : `<div class="timeline" id="timeline">${sections.map((sec, idx) => {
+        const isFirst = idx === 0;
+        const dotClass = isFirst && isActive ? "tl-dot active" : "tl-dot done";
+        const badge = isFirst && isActive
+          ? `<span class="badge badge-green" style="font-size:10px">● Running</span>`
+          : "";
+        const items = sec.items.map(item =>
+          `<li>${escapeHtml(item)}</li>`
+        ).join("");
+        return `
+        <div class="tl-item">
+          <div class="tl-left">
+            <div class="${dotClass}"></div>
+            ${idx < sections.length - 1 ? `<div class="tl-line"></div>` : ""}
+          </div>
+          <div class="tl-body">
+            <div class="tl-heading">
+              <span class="tl-title">${escapeHtml(sec.heading)}</span>
+              ${badge}
+            </div>
+            ${items ? `<ul class="tl-list">${items}</ul>` : `<p class="tl-empty">No entries.</p>`}
+          </div>
+        </div>`;
+      }).join("")}</div>`;
+
+  return `
+    <div class="page-header">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h1>📝 Activity</h1>
+        ${isActive ? `<span class="badge badge-green" style="font-size:11px">● Live — updates every 3s</span>` : ""}
+        <button class="btn btn-ghost btn-sm" onclick="location.reload()">↻ Refresh</button>
+      </div>
+    </div>
+    ${statusBar}
+    ${progressHtml}
+    ${timelineHtml}`;
+}
+
 function routeActivity(cwd: string): string {
   const projectCwd = loadProjectCwd(cwd);
   const state = loadState(projectCwd);
-  const p = activityPath(projectCwd);
-  if (!existsSync(p)) {
-    return htmlPage("Activity", `
-      <div class="page-header"><h1>📝 Activity Log</h1></div>
-      <p class="empty-state">No <code>activity.md</code> found. Run Ralph with <code>--plan</code> to have the agent maintain an activity log.</p>
-    `, "/activity", "", state);
-  }
-  const content = lastNLines(readFileSafe(p), 120);
   const isActive = state?.active === true;
-  const extra = isActive
-    ? `<script>setTimeout(() => location.reload(), 10000);</script>`
-    : "";
-  return htmlPage("Activity", `
-    <div class="page-header">
-      <div style="display:flex;align-items:center;gap:12px">
-        <h1>📝 Activity Log</h1>
-        <button class="btn btn-ghost btn-sm" onclick="location.reload()">↻ Refresh</button>
-        ${isActive ? `<span class="badge badge-green">● Live</span>` : ""}
-      </div>
-      <p class="page-subtitle">activity.md — last 120 lines</p>
-    </div>
-    <pre id="activity-log">${escapeHtml(content)}</pre>
-  `, "/activity", extra, state);
+
+  const extraHead = isActive ? `<script>
+    let lastRev = '';
+    setInterval(async () => {
+      try {
+        const r = await fetch('/api/activity-data');
+        const d = await r.json();
+        const rev = JSON.stringify(d);
+        if (rev === lastRev) return;
+        lastRev = rev;
+
+        // Update status bar
+        const iterEl = document.getElementById('act-iter');
+        if (iterEl && d.state?.iteration != null) iterEl.textContent = d.state.iteration;
+
+        // Update progress bar
+        if (d.progress && d.progress.total > 0) {
+          const pct = Math.round(d.progress.done / d.progress.total * 100);
+          const fill = document.getElementById('prog-fill');
+          const label = document.getElementById('prog-label');
+          const pctEl = document.getElementById('prog-pct');
+          if (fill) fill.style.width = pct + '%';
+          if (label) label.textContent = d.progress.done + ' / ' + d.progress.total;
+          if (pctEl) pctEl.textContent = pct + '%';
+        }
+
+        // Rebuild timeline
+        if (d.sections) {
+          const tl = document.getElementById('timeline');
+          if (tl) {
+            tl.innerHTML = d.sections.map((sec, idx) => {
+              const isFirst = idx === 0;
+              const dotClass = isFirst && d.state?.active ? 'tl-dot active' : 'tl-dot done';
+              const badge = isFirst && d.state?.active
+                ? '<span class="badge badge-green" style="font-size:10px">● Running</span>' : '';
+              const items = sec.items.map(i => '<li>' + esc(i) + '</li>').join('');
+              const hasLine = idx < d.sections.length - 1;
+              return '<div class="tl-item">'
+                + '<div class="tl-left"><div class="' + dotClass + '"></div>'
+                + (hasLine ? '<div class="tl-line"></div>' : '')
+                + '</div>'
+                + '<div class="tl-body"><div class="tl-heading">'
+                + '<span class="tl-title">' + esc(sec.heading) + '</span>' + badge
+                + '</div>'
+                + (items ? '<ul class="tl-list">' + items + '</ul>'
+                         : '<p class="tl-empty">No entries.</p>')
+                + '</div></div>';
+            }).join('');
+          }
+        }
+
+        // If loop ended, stop polling
+        if (!d.state?.active) location.reload();
+      } catch {}
+    }, 3000);
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+  </script>` : "";
+
+  return htmlPage("Activity", buildActivityHtml(projectCwd, state), "/activity", extraHead, state);
 }
 
 // ─── Route: Logs ──────────────────────────────────────────────────────────────
@@ -1715,6 +2036,21 @@ function routeApiStatus(cwd: string): Response {
   });
 }
 
+// ─── Route: GET /api/activity-data ───────────────────────────────────────────
+
+function routeApiActivityData(cwd: string): Response {
+  const projectCwd = loadProjectCwd(cwd);
+  const state = loadState(projectCwd);
+  const actContent = readFileSafe(activityPath(projectCwd));
+  const planContent = readFileSafe(planPath(projectCwd));
+  const sections = actContent ? parseActivityMd(actContent) : [];
+  const progress = planContent ? parsePlanProgress(planContent) : null;
+  return new Response(
+    JSON.stringify({ state, sections, progress }),
+    { headers: { "Content-Type": "application/json" } }
+  );
+}
+
 // ─── Route: GET /api/console-log ─────────────────────────────────────────────
 
 function routeApiConsoleLog(cwd: string): Response {
@@ -1782,6 +2118,7 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
       if (path === "/readme")             return html(routeReadme(cwd));
       if (path === "/console")            return html(routeConsole(cwd));
       if (path === "/api/console-log")    return routeApiConsoleLog(cwd);
+      if (path === "/api/activity-data")  return routeApiActivityData(cwd);
       if (path === "/intervene") {
         if (req.method === "POST") return routeIntervenePost(req, cwd);
         let flash: { type: string; message: string } | undefined;
