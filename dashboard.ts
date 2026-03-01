@@ -2844,21 +2844,24 @@ async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Re
   const agent    = String(body.agent  ?? "").trim();
   const modelRaw = String(body.model  ?? "").trim();
 
-  // Determine backend: base-url → OpenAI-compat; claude-code / claude-* model → Anthropic; fallback → OpenAI
+  // Determine backend:
+  //   1. base-url set                               → OpenAI-compatible endpoint
+  //   2. claude-code / claude-* model + ANTHROPIC   → Anthropic API
+  //   3. any agent + ANTHROPIC (covers opencode)    → Anthropic API
+  //   4. OPENAI_API_KEY available                   → OpenAI API
+  //   5. error
+  const isClaudeBased = agent === "claude-code" || modelRaw.toLowerCase().startsWith("claude");
   const useAnthropicKey =
     !baseUrl &&
-    (agent === "claude-code" || modelRaw.toLowerCase().startsWith("claude")) &&
-    !!process.env.ANTHROPIC_API_KEY;
+    !!process.env.ANTHROPIC_API_KEY &&
+    (isClaudeBased || !process.env.OPENAI_API_KEY);
 
   const useOpenAICompat = !!baseUrl || (!useAnthropicKey && !!process.env.OPENAI_API_KEY);
 
   if (!useAnthropicKey && !useOpenAICompat) {
-    const hint = (agent === "claude-code" || modelRaw.toLowerCase().startsWith("claude"))
-      ? "Set ANTHROPIC_API_KEY, or enter a Base URL."
-      : "Enter a Base URL (e.g. http://localhost:11434/v1) or set OPENAI_API_KEY.";
-    return new Response(JSON.stringify({ error: `No LLM API configured. ${hint}` }), {
-      status: 400, headers: { "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({
+      error: "No LLM API configured. Enter a Base URL (e.g. http://localhost:11434/v1), or set ANTHROPIC_API_KEY / OPENAI_API_KEY.",
+    }), { status: 400, headers: { "Content-Type": "application/json" } });
   }
 
   const projectCwd = loadCurrentProject(serverCwd);
