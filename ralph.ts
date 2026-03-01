@@ -7,7 +7,7 @@
  */
 
 import { $ } from "bun";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, unlinkSync } from "fs";
 import { join } from "path";
 import { checkTerminalPromise, checkAnywhereInOutput, stripAnsi, tasksMarkdownAllComplete } from "./completion";
 
