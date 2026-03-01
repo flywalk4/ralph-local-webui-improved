@@ -72,16 +72,30 @@ function parseActivityMd(content: string): Array<{ heading: string; items: strin
   return sections.reverse();
 }
 
-/** Parse IMPLEMENTATION_PLAN.md checkboxes for progress. */
-function parsePlanProgress(content: string): { done: number; total: number; tasks: Array<{ text: string; done: boolean }> } {
-  const tasks: Array<{ text: string; done: boolean }> = [];
+/** Parse IMPLEMENTATION_PLAN.md checkboxes for progress.
+ *  Each task gets status: "done" | "active" | "pending".
+ *  When isActive=true the first unchecked item becomes "active". */
+function parsePlanProgress(content: string, isActive = false): {
+  done: number; total: number;
+  tasks: Array<{ text: string; status: "done" | "active" | "pending" }>;
+} {
+  const tasks: Array<{ text: string; status: "done" | "active" | "pending" }> = [];
+  let markedActive = false;
   for (const line of content.split("\n")) {
     const done = line.match(/[-*]\s+\[x\]\s+(.+)/i);
     const todo = line.match(/[-*]\s+\[ \]\s+(.+)/);
-    if (done) tasks.push({ text: done[1].trim(), done: true });
-    else if (todo) tasks.push({ text: todo[1].trim(), done: false });
+    if (done) {
+      tasks.push({ text: done[1].trim(), status: "done" });
+    } else if (todo) {
+      if (isActive && !markedActive) {
+        tasks.push({ text: todo[1].trim(), status: "active" });
+        markedActive = true;
+      } else {
+        tasks.push({ text: todo[1].trim(), status: "pending" });
+      }
+    }
   }
-  return { done: tasks.filter(t => t.done).length, total: tasks.length, tasks };
+  return { done: tasks.filter(t => t.status === "done").length, total: tasks.length, tasks };
 }
 
 // ─── PID helpers ──────────────────────────────────────────────────────────────
@@ -792,25 +806,54 @@ const GLOBAL_CSS = `
     transition: width 0.6s ease;
     min-width: 2px;
   }
-  .progress-tasks {
-    margin-top: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .progress-task {
+  /* ── Task status list ───────────────────────────────────── */
+  .task-list { display: flex; flex-direction: column; gap: 3px; margin-top: 14px; }
+  .task-item {
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 20px;
-    border: 1px solid var(--border-sub);
-    background: var(--surface-2);
-    color: var(--text-muted);
+    gap: 12px;
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    border: 1px solid transparent;
+    transition: background 0.2s;
   }
-  .progress-task.done { color: var(--success); background: var(--success-dim); border-color: #2a6030; }
-  .progress-task .task-icon { font-size: 10px; }
+  .task-item.done { color: var(--text-muted); }
+  .task-item.done .task-text { text-decoration: line-through; opacity: 0.55; }
+  .task-item.active {
+    background: var(--warning-dim);
+    border-color: rgba(210,153,34,0.35);
+    color: var(--text);
+    font-weight: 500;
+  }
+  .task-item.pending { color: var(--text-muted); }
+  .task-icon-wrap {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .task-icon-wrap.done { background: var(--success-dim); color: var(--success); }
+  .task-icon-wrap.active {
+    background: var(--warning-dim);
+    color: var(--warning);
+    border: 1.5px solid var(--warning);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .task-icon-wrap.pending { background: var(--surface-3); color: var(--text-muted); }
+  .task-status-label {
+    margin-left: auto;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    flex-shrink: 0;
+  }
+  .task-item.active .task-status-label { opacity: 1; color: var(--warning); }
 
   .timeline { display: flex; flex-direction: column; gap: 0; }
   .tl-item {
@@ -1579,20 +1622,20 @@ function buildActivityHtml(projectCwd: string, state: Record<string, unknown> | 
       ${elapsed ? `<span class="sep">|</span><span>Elapsed: <strong id="act-elapsed">${elapsed}</strong></span>` : ""}
     </div>` : "";
 
-  // ── Progress bar from IMPLEMENTATION_PLAN.md ──────────────────────────────
+  // ── Task list from IMPLEMENTATION_PLAN.md ─────────────────────────────────
   const planContent = readFileSafe(planPath(projectCwd));
-  const progress = planContent ? parsePlanProgress(planContent) : null;
+  const progress = planContent ? parsePlanProgress(planContent, isActive) : null;
   const progressHtml = progress && progress.total > 0 ? (() => {
     const pct = Math.round((progress.done / progress.total) * 100);
-    // Show up to 8 tasks as chips, rest as "+N more"
-    const shown = progress.tasks.slice(0, 8);
-    const extra = progress.tasks.length - shown.length;
-    const chips = shown.map(t =>
-      `<span class="progress-task ${t.done ? "done" : ""}">
-         <span class="task-icon">${t.done ? "✓" : "○"}</span>
-         ${escapeHtml(t.text.substring(0, 40))}${t.text.length > 40 ? "…" : ""}
-       </span>`
-    ).join("");
+    const taskRows = progress.tasks.map(t => {
+      const icon = t.status === "done" ? "✓" : t.status === "active" ? "▶" : "○";
+      const label = t.status === "done" ? "done" : t.status === "active" ? "in progress" : "pending";
+      return `<div class="task-item ${t.status}">
+        <div class="task-icon-wrap ${t.status}">${icon}</div>
+        <span class="task-text">${escapeHtml(t.text)}</span>
+        <span class="task-status-label">${label}</span>
+      </div>`;
+    }).join("");
     return `
     <div class="progress-wrap" id="progress-wrap">
       <div class="progress-meta">
@@ -1602,10 +1645,7 @@ function buildActivityHtml(projectCwd: string, state: Record<string, unknown> | 
       <div class="progress-track">
         <div class="progress-fill" id="prog-fill" style="width:${pct}%"></div>
       </div>
-      <div class="progress-tasks" id="prog-tasks">
-        ${chips}
-        ${extra > 0 ? `<span class="progress-task">+${extra} more</span>` : ""}
-      </div>
+      <div class="task-list" id="task-list">${taskRows}</div>
     </div>`;
   })() : "";
 
@@ -1672,7 +1712,7 @@ function routeActivity(cwd: string): string {
         const iterEl = document.getElementById('act-iter');
         if (iterEl && d.state?.iteration != null) iterEl.textContent = d.state.iteration;
 
-        // Update progress bar
+        // Update progress bar + task list
         if (d.progress && d.progress.total > 0) {
           const pct = Math.round(d.progress.done / d.progress.total * 100);
           const fill = document.getElementById('prog-fill');
@@ -1681,6 +1721,19 @@ function routeActivity(cwd: string): string {
           if (fill) fill.style.width = pct + '%';
           if (label) label.textContent = d.progress.done + ' / ' + d.progress.total;
           if (pctEl) pctEl.textContent = pct + '%';
+          // Rebuild task list
+          const taskList = document.getElementById('task-list');
+          if (taskList) {
+            taskList.innerHTML = d.progress.tasks.map(t => {
+              const icon = t.status === 'done' ? '✓' : t.status === 'active' ? '▶' : '○';
+              const lbl  = t.status === 'done' ? 'done' : t.status === 'active' ? 'in progress' : 'pending';
+              return '<div class="task-item ' + t.status + '">'
+                + '<div class="task-icon-wrap ' + t.status + '">' + icon + '</div>'
+                + '<span class="task-text">' + esc(t.text) + '</span>'
+                + '<span class="task-status-label">' + lbl + '</span>'
+                + '</div>';
+            }).join('');
+          }
         }
 
         // Rebuild timeline
@@ -2044,7 +2097,7 @@ function routeApiActivityData(cwd: string): Response {
   const actContent = readFileSafe(activityPath(projectCwd));
   const planContent = readFileSafe(planPath(projectCwd));
   const sections = actContent ? parseActivityMd(actContent) : [];
-  const progress = planContent ? parsePlanProgress(planContent) : null;
+  const progress = planContent ? parsePlanProgress(planContent, state?.active === true) : null;
   return new Response(
     JSON.stringify({ state, sections, progress }),
     { headers: { "Content-Type": "application/json" } }
