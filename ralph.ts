@@ -9,6 +9,7 @@
 import { $ } from "bun";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, unlinkSync } from "fs";
 import { join } from "path";
+import { createInterface as rlCreateInterface } from "readline";
 import { checkTerminalPromise, checkAnywhereInOutput, stripAnsi, tasksMarkdownAllComplete } from "./completion";
 
 const VERSION = "1.2.3";
@@ -609,7 +610,7 @@ function saveHistory(history: RalphHistory): void {
 function clearHistory(): void {
   if (existsSync(historyPath)) {
     try {
-      require("fs").unlinkSync(historyPath);
+      unlinkSync(historyPath);
     } catch {}
   }
 }
@@ -880,7 +881,7 @@ if (addContextIdx !== -1) {
 // Clear context command
 if (args.includes("--clear-context")) {
   if (existsSync(contextPath)) {
-    require("fs").unlinkSync(contextPath);
+    unlinkSync(contextPath);
     console.log(`✅ Context cleared`);
   } else {
     console.log(`ℹ️  No pending context to clear`);
@@ -1481,7 +1482,7 @@ function loadState(): RalphState | null {
 function clearState(): void {
   if (existsSync(statePath)) {
     try {
-      require("fs").unlinkSync(statePath);
+      unlinkSync(statePath);
     } catch {}
   }
 }
@@ -1631,7 +1632,7 @@ function loadContext(): string | null {
 function clearContext(): void {
   if (existsSync(contextPath)) {
     try {
-      require("fs").unlinkSync(contextPath);
+      unlinkSync(contextPath);
     } catch {}
   }
 }
@@ -1664,7 +1665,7 @@ function loadPendingQuestions(): PendingQuestion[] {
 function clearPendingQuestions(): void {
   if (existsSync(questionsPath)) {
     try {
-      require("fs").unlinkSync(questionsPath);
+      unlinkSync(questionsPath);
     } catch {}
   }
 }
@@ -1702,7 +1703,7 @@ function detectQuestionTool(output: string, agent: AgentConfig): string | null {
 
 async function promptUser(question: string): Promise<string> {
   return new Promise(resolve => {
-    const rl = require("readline").createInterface({
+    const rl = rlCreateInterface({
       input: process.stdin,
       output: process.stdout,
     });
@@ -1779,8 +1780,8 @@ async function parseGitLogIssues(): Promise<string[]> {
 
 async function parseGitDiff(): Promise<string> {
   try {
-    const commitCount = parseInt((await $`git rev-list --count HEAD`.text()).trim());
-    if (commitCount < 2) return "";
+    const commitCount = parseInt((await $`git rev-list --count HEAD`.text()).trim(), 10);
+    if (isNaN(commitCount) || commitCount < 2) return "";
     const stat = (await $`git diff HEAD~1 --stat`.text()).trim();
     if (!stat) return "";
     const raw = (await $`git diff HEAD~1`.text()).trim();
@@ -2431,8 +2432,14 @@ async function captureFileSnapshot(): Promise<FileSnapshot> {
     // Get hash for each file (using git hash-object for content comparison)
     for (const file of allFiles) {
       try {
-        const hash = await $`git hash-object ${file} 2>/dev/null || stat -f '%m' ${file} 2>/dev/null || echo ''`.text();
-        files.set(file, hash.trim());
+        let hash = "";
+        try {
+          hash = (await $`git hash-object ${file}`.text()).trim();
+        } catch {
+          // fall back to mtime when git hash-object fails (e.g. untracked file)
+          try { hash = String(statSync(file).mtimeMs); } catch {}
+        }
+        files.set(file, hash);
       } catch {
         // File may not exist, skip
       }

@@ -75,6 +75,8 @@ done
 - **Self-Correcting Loops** — Agent sees its previous work and fixes its own mistakes
 - **Git Self-Diagnosis** — Automatically scans recent commits for `TODO`, `FIXME`, `ERROR`, `FAIL`, `BUG`, `BROKEN`, `HACK` keywords and injects a warning section into every prompt
 - **Web Dashboard** — `ralph dashboard` opens a full dark web UI to launch loops, monitor progress, view plans/logs, inject context, and stop runs — all from the browser
+- **✨ Prompt Enrichment** — One-click button on the Launch page expands a short task description into a detailed, agent-ready specification using the configured LLM (works with Anthropic API, OpenAI API, or any local model via `--base-url`)
+- **⏹ Stop Loop** — Stop the running loop instantly from the sidebar button (visible on every page) or from the Status page, without touching the terminal
 - **Plan Mode** — `--plan` keeps `IMPLEMENTATION_PLAN.md` and `activity.md` in sync across iterations
 - **Improving Mode** — `--improving [N]` keeps running after the task is done; each cycle ralph autonomously picks the most valuable improvement (design, performance, tests, security, features, etc.) and implements it. Works on existing projects too: `ralph --improving 5`
 - **Task Tracking** — `--tasks` mode breaks complex projects into a managed checklist
@@ -357,13 +359,14 @@ Compose and fire off a ralph loop entirely from the browser — no CLI needed.
 
 Every CLI option is available as a form control:
 
-- **Prompt** — full task description textarea
+- **Prompt** — full task description textarea with a **✨ Enrich** button that expands a rough description into a detailed spec using the configured LLM
 - **Agent & Model** — dropdown for all 6 agent types, model text input, Base URL field with **↓ Models** button that fetches available models directly from Ollama (or any OpenAI-compatible endpoint)
 - **Rotation** — cycle through agent:model pairs each iteration
 - **Iteration control** — max/min iterations, completion signal, abort signal, max prompt tokens
 - **Modes** — `--plan`, `--tasks`, `--optimize`, `--diff` checkboxes
 - **Options** — `--allow-all`, `--no-commit`, `--no-plugins`, `--no-stream`, `--verbose-tools`, `--no-questions`
 - **Advanced** — preset name, project directory (with **📁 Browse** file explorer modal)
+- **Stop Loop** — a red **⏹ Stop Loop** button appears in the warning banner when a loop is already running
 
 ### Status page
 
@@ -374,7 +377,7 @@ Shows the active loop state with live polling (auto-refreshes every 5 seconds wh
 - Current iteration, agent, model, base URL
 - Elapsed time, started timestamp, completion signal
 - Plan mode / tasks mode indicators
-- **⏹ Stop Loop** button to terminate the running process
+- **⏹ Stop Loop** button to terminate the running process (also available in the sidebar on every page)
 - Per-iteration history: duration, completion ✓/✗, tools used
 
 ### Logs page
@@ -729,9 +732,10 @@ Rotation cycles back to entry 1 after the last entry. The `--status` command sho
 ```
 ralph-wiggum/
 ├── bin/ralph.js          # CLI entrypoint (npm wrapper)
-├── ralph.ts              # Main loop implementation (~2500 lines)
-├── dashboard.ts          # Web dashboard (Bun HTTP server)
-├── completion.ts         # Completion detection helpers
+├── ralph.ts              # Main loop implementation (~3100 lines)
+├── dashboard.ts          # Web dashboard (Bun HTTP server, ~3200 lines)
+├── completion.ts         # Completion detection & git issue filtering helpers
+├── llm-agent.ts          # Built-in LLM agent (OpenAI-compatible API, no extra CLI needed)
 ├── package.json
 ├── install.sh / install.ps1
 └── uninstall.sh / uninstall.ps1
