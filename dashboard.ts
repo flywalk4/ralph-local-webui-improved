@@ -71,7 +71,10 @@ async function launchRalph(formData: URLSearchParams, serverCwd: string): Promis
   const prompt = formData.get("prompt")?.trim() ?? "";
   if (!prompt) return "Prompt is required";
 
-  const args: string[] = ["bun", RALPH_SCRIPT_PATH, prompt];
+  // Use process.execPath (absolute path to the current bun binary) so
+  // Bun.spawn can find it without relying on PATH, which is not inherited
+  // from the shell on Windows.
+  const args: string[] = [process.execPath, RALPH_SCRIPT_PATH, prompt];
 
   const add = (flag: string, val: string | null) => {
     if (val?.trim()) args.push(flag, val.trim());
