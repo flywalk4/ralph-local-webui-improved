@@ -29,15 +29,6 @@
   <a href="#presets">Presets</a>
 </p>
 
-<p align="center">
-  <strong>Tired of agents breaking your local environment?</strong><br>
-  🏝️ <a href="https://github.com/Th0rgal/sandboxed.sh">sandboxed.sh</a> gives each task an isolated Linux workspace. Self-hosted. Git-backed.
-</p>
-
-<p align="center">
-  💬 <strong>Join the community:</strong> <a href="https://relens.ai/community">relens.ai/community</a>
-</p>
-
 ---
 
 ## Supported Agents
@@ -727,7 +718,6 @@ Install Bun: https://bun.sh
 
 - [Original Ralph Wiggum technique by Geoffrey Huntley](https://ghuntley.com/ralph/)
 - [Ralph Orchestrator](https://github.com/mikeyobrien/ralph-orchestrator)
-- [sandboxed.sh](https://github.com/Th0rgal/sandboxed.sh) — isolated Linux workspaces for AI agents
 
 ## License
 
