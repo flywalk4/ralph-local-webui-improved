@@ -16,6 +16,15 @@ const VERSION = "1.2.3";
 // Detect Windows platform for command resolution
 const IS_WINDOWS = process.platform === "win32";
 
+// Path to the opencode user config for registering local/remote providers
+const OPENCODE_USER_CONFIG_PATH = join(
+  process.env.XDG_CONFIG_HOME ??
+    join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".config"),
+  "opencode",
+  "opencode.json"
+);
+const RALPH_PROVIDER_KEY = "ralph-local";
+
 // Context file path for mid-loop injection
 const stateDir = join(process.cwd(), ".ralph");
 const statePath = join(stateDir, "ralph-loop.state.json");
@@ -31,7 +40,7 @@ let initConfigPath = "";
 const AGENT_TYPES = ["opencode", "claude-code", "codex", "copilot", "aider"] as const;
 type AgentType = (typeof AGENT_TYPES)[number];
 
-type AgentEnvOptions = { filterPlugins?: boolean; allowAllPermissions?: boolean; baseUrl?: string };
+type AgentEnvOptions = { filterPlugins?: boolean; allowAllPermissions?: boolean; baseUrl?: string; model?: string };
 
 type AgentBuildArgsOptions = { allowAllPermissions?: boolean; extraFlags?: string[]; streamOutput?: boolean; baseUrl?: string };
 
@@ -121,7 +130,15 @@ PARSE_PATTERNS["copilot"] = defaultParseToolOutput;
 const ARGS_TEMPLATES: Record<string, (prompt: string, model: string, options?: AgentBuildArgsOptions) => string[]> = {
   "opencode": (prompt, model, options) => {
     const cmdArgs = ["run"];
-    if (model) cmdArgs.push("-m", model);
+    let resolvedModel = model;
+    if (options?.baseUrl) {
+      if (!model) {
+        console.error("Error: --base-url with --agent opencode requires --model (e.g. --model qwen2.5-coder:32b)");
+        process.exit(1);
+      }
+      resolvedModel = ensureOpencodeProvider(options.baseUrl, model);
+    }
+    if (resolvedModel) cmdArgs.push("-m", resolvedModel);
     if (options?.extraFlags?.length) cmdArgs.push(...options.extraFlags);
     cmdArgs.push(prompt);
     return cmdArgs;
@@ -158,6 +175,9 @@ const ARGS_TEMPLATES: Record<string, (prompt: string, model: string, options?: A
     // Without this, aider commits first and then ralph commits the same changes again,
     // causing the git log to be polluted and the loop to see no diff on the next run.
     cmdArgs.push("--no-auto-commits");
+    // Prevent aider from opening the browser for update notifications.
+    cmdArgs.push("--no-check-update");
+    cmdArgs.push("--no-show-model-warnings");
     if (options?.extraFlags?.length) cmdArgs.push(...options.extraFlags);
     return cmdArgs;
   },
@@ -174,10 +194,12 @@ const ARGS_TEMPLATES: Record<string, (prompt: string, model: string, options?: A
 const ENV_TEMPLATES: Record<string, (options: AgentEnvOptions) => Record<string, string>> = {
   "opencode": (options) => {
     const env = { ...process.env };
-    if (options.filterPlugins || options.allowAllPermissions) {
+    if (options.filterPlugins || options.allowAllPermissions || options.baseUrl) {
       env.OPENCODE_CONFIG = ensureRalphConfig({
         filterPlugins: options.filterPlugins,
         allowAllPermissions: options.allowAllPermissions,
+        baseUrl: options.baseUrl,
+        model: options.model,
       });
     }
     return env;
@@ -1305,7 +1327,7 @@ function loadPluginsFromConfig(configPath: string): string[] {
   }
 }
 
-function ensureRalphConfig(options: { filterPlugins?: boolean; allowAllPermissions?: boolean }): string {
+function ensureRalphConfig(options: { filterPlugins?: boolean; allowAllPermissions?: boolean; baseUrl?: string; model?: string }): string {
   if (!existsSync(stateDir)) {
     mkdirSync(stateDir, { recursive: true });
   }
@@ -1349,8 +1371,63 @@ function ensureRalphConfig(options: { filterPlugins?: boolean; allowAllPermissio
     };
   }
 
+  // Inject ralph-local provider so OPENCODE_CONFIG doesn't hide the remote endpoint
+  if (options.baseUrl) {
+    const apiBase = options.baseUrl.replace(/\/+$/, "");
+    const baseWithV1 = apiBase.endsWith("/v1") ? apiBase : `${apiBase}/v1`;
+    const models: Record<string, { name: string }> = {};
+    if (options.model) models[options.model] = { name: options.model };
+    config.provider = {
+      [RALPH_PROVIDER_KEY]: {
+        npm: "@ai-sdk/openai-compatible",
+        name: "Ralph Local (OpenAI-compatible)",
+        options: { baseURL: baseWithV1 },
+        ...(Object.keys(models).length > 0 ? { models } : {}),
+      },
+    };
+  }
+
   writeFileSync(configPath, JSON.stringify(config, null, 2));
   return configPath;
+}
+
+/**
+ * Registers a "ralph-local" provider in the opencode user config
+ * (~/.config/opencode/opencode.json) and returns the model string
+ * in opencode's "providerKey/modelId" format.
+ */
+function ensureOpencodeProvider(baseUrl: string, model: string): string {
+  const apiBase = baseUrl.replace(/\/+$/, "");
+  const baseWithV1 = apiBase.endsWith("/v1") ? apiBase : `${apiBase}/v1`;
+
+  let config: Record<string, any> = { $schema: "https://opencode.ai/config.json" };
+  if (existsSync(OPENCODE_USER_CONFIG_PATH)) {
+    try {
+      config = JSON.parse(readFileSync(OPENCODE_USER_CONFIG_PATH, "utf-8"));
+    } catch { /* leave empty config */ }
+  }
+
+  if (!config.provider) config.provider = {};
+  const existing = config.provider[RALPH_PROVIDER_KEY] ?? {};
+  const existingModels: Record<string, { name: string }> = existing.models ?? {};
+  existingModels[model] = { name: model };
+
+  config.provider[RALPH_PROVIDER_KEY] = {
+    npm: "@ai-sdk/openai-compatible",
+    name: "Ralph Local (OpenAI-compatible)",
+    options: { baseURL: baseWithV1 },
+    models: existingModels,
+  };
+
+  const configDir = join(
+    process.env.XDG_CONFIG_HOME ??
+      join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".config"),
+    "opencode"
+  );
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(OPENCODE_USER_CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
+
+  return `${RALPH_PROVIDER_KEY}/${model}`;
 }
 
 async function validateAgent(agent: AgentConfig): Promise<void> {
@@ -2323,6 +2400,7 @@ async function runRalphLoop(): Promise<void> {
         filterPlugins: disablePlugins,
         allowAllPermissions: allowAllPermissions,
         baseUrl: state.baseUrl,
+        model: currentModel,
       });
 
       // Run agent using spawn for better argument handling
