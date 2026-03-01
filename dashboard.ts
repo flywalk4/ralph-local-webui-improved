@@ -107,6 +107,9 @@ async function launchRalph(formData: URLSearchParams, serverCwd: string): Promis
 
   const extraCwd = formData.get("cwd")?.trim() || serverCwd;
 
+  // Create the directory if it doesn't exist yet
+  mkdirSync(extraCwd, { recursive: true });
+
   const proc = Bun.spawn(args, {
     cwd: extraCwd,
     detached: true,
@@ -1081,7 +1084,28 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
       let currentBrowsePath = initialCwd;
 
       // ── Directory browser ─────────────────────────────────────────
-      function openDirModal() {
+      const IS_WINDOWS = ${JSON.stringify(process.platform === "win32")};
+
+      async function openDirModal() {
+        if (IS_WINDOWS) {
+          // Use native Windows folder picker dialog
+          const btn = document.querySelector('[onclick="openDirModal()"]');
+          if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+          try {
+            const resp = await fetch('/api/browse-native');
+            const data = await resp.json();
+            if (data.path) {
+              document.getElementById('cwd').value = data.path;
+            }
+            // if cancelled, do nothing
+          } catch (e) {
+            alert('Could not open folder picker: ' + e.message);
+          } finally {
+            if (btn) { btn.textContent = '📁 Browse'; btn.disabled = false; }
+          }
+          return;
+        }
+        // Non-Windows fallback: custom modal browser
         const cwdInput = document.getElementById('cwd').value.trim() || initialCwd;
         document.getElementById('dir-modal').classList.add('open');
         browseTo(cwdInput);
@@ -1484,6 +1508,53 @@ function routeReadme(cwd: string): string {
   `, "/readme", "", state);
 }
 
+// ─── Route: GET /api/browse-native (Windows folder picker dialog) ────────────
+
+function routeApiBrowseNative(serverCwd: string): Response {
+  if (process.platform !== "win32") {
+    return new Response(JSON.stringify({ error: "not-windows" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Run a PowerShell FolderBrowserDialog synchronously.
+  // The server blocks on this call until the user picks a folder or cancels.
+  const startPath = serverCwd.replace(/'/g, "''");
+  const ps = `
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.Form
+$f.TopMost = $true
+$d = New-Object System.Windows.Forms.FolderBrowserDialog
+$d.Description = 'Select project directory for Ralph'
+$d.SelectedPath = '${startPath}'
+$d.ShowNewFolderButton = $true
+$r = $d.ShowDialog($f)
+if ($r -eq 'OK') { Write-Output $d.SelectedPath }
+`.trim();
+
+  try {
+    const proc = Bun.spawnSync(
+      ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+      { stdout: "pipe", stderr: "pipe" }
+    );
+    const output = new TextDecoder().decode(proc.stdout).trim();
+    if (output) {
+      return new Response(JSON.stringify({ path: output }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    // User cancelled — return empty path
+    return new Response(JSON.stringify({ cancelled: true }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
 // ─── Route: GET /api/browse ───────────────────────────────────────────────────
 
 function routeApiBrowse(req: Request): Response {
@@ -1631,6 +1702,7 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
       if (path === "/api/status")         return routeApiStatus(cwd);
       if (path === "/api/models")         return routeApiModels(req);
       if (path === "/api/browse")         return routeApiBrowse(req);
+      if (path === "/api/browse-native")  return routeApiBrowseNative(cwd);
 
       return new Response("Not Found", { status: 404 });
     },
