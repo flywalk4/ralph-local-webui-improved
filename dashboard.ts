@@ -10,6 +10,7 @@ import { join, resolve, dirname } from "path";
 
 const RALPH_README_PATH = join(import.meta.dir, "README.md");
 const RALPH_SCRIPT_PATH = join(import.meta.dir, "ralph.ts");
+const RALPH_LOGO_PATH   = join(import.meta.dir, "ralph-logo.png");
 
 // ─── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -351,6 +352,15 @@ const GLOBAL_CSS = `
   }
 
   .brand-icon { font-size: 20px; }
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center top;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+  }
 
   .status-dot {
     width: 8px; height: 8px;
@@ -787,6 +797,7 @@ function htmlPage(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)} — Ralph</title>
+  <link rel="icon" type="image/png" href="/logo.png">
   <style>${GLOBAL_CSS}</style>
   ${extraHead}
 </head>
@@ -794,7 +805,7 @@ function htmlPage(
 <div class="layout">
   <aside class="sidebar">
     <div class="sidebar-brand">
-      <span class="brand-icon">🎠</span>
+      <img src="/logo.png" alt="Ralph" class="brand-logo">
       <span>Ralph</span>
       <span class="${dotClass}" id="status-dot" title="${dotTitle}"></span>
     </div>
@@ -1587,6 +1598,12 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
       const html = (s: string) => new Response(s, { headers: { "Content-Type": "text/html; charset=utf-8" } });
       const q = url.searchParams;
 
+      if (path === "/logo.png") {
+        if (existsSync(RALPH_LOGO_PATH)) {
+          return new Response(Bun.file(RALPH_LOGO_PATH));
+        }
+        return new Response("Not Found", { status: 404 });
+      }
       if (path === "/" || path === "")    return new Response(null, { status: 302, headers: { Location: "/launch" } });
       if (path === "/launch") {
         if (req.method === "POST") return routeLaunchPost(req, cwd);
