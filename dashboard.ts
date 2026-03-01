@@ -72,6 +72,107 @@ function parseActivityMd(content: string): Array<{ heading: string; items: strin
   return sections.reverse();
 }
 
+/** Parse IMPLEMENTATION_PLAN.md into sections with task statuses.
+ *  Preserves heading structure; tasks inside each section get done/active/pending. */
+function parsePlanSections(content: string, isActive: boolean): {
+  sections: Array<{
+    heading: string;
+    level: number;
+    tasks: Array<{ text: string; status: "done" | "active" | "pending" }>;
+    notes: string[];
+  }>;
+  total: number;
+  done: number;
+} {
+  type Sec = { heading: string; level: number; tasks: Array<{ text: string; status: "done" | "active" | "pending" }>; notes: string[] };
+  const sections: Sec[] = [];
+  let current: Sec | null = null;
+  let markedActive = false;
+
+  for (const line of content.split("\n")) {
+    const hm = line.match(/^(#{1,4})\s+(.+)/);
+    const dm = line.match(/^\s*[-*]\s+\[x\]\s+(.+)/i);
+    const tm = line.match(/^\s*[-*]\s+\[ \]\s+(.+)/);
+    if (hm) {
+      current = { heading: hm[2].trim(), level: hm[1].length, tasks: [], notes: [] };
+      sections.push(current);
+    } else if (dm) {
+      if (!current) { current = { heading: "", level: 0, tasks: [], notes: [] }; sections.push(current); }
+      current.tasks.push({ text: dm[1].trim(), status: "done" });
+    } else if (tm) {
+      if (!current) { current = { heading: "", level: 0, tasks: [], notes: [] }; sections.push(current); }
+      const status: "active" | "pending" = isActive && !markedActive ? "active" : "pending";
+      if (status === "active") markedActive = true;
+      current.tasks.push({ text: tm[1].trim(), status });
+    } else {
+      const t = line.trim();
+      if (t && current && !t.match(/^[-=*]{3,}$/) && !t.startsWith("```") && !t.startsWith("|")) {
+        current.notes.push(t);
+      }
+    }
+  }
+
+  const allTasks = sections.flatMap(s => s.tasks);
+  return { sections, total: allTasks.length, done: allTasks.filter(t => t.status === "done").length };
+}
+
+/** Render IMPLEMENTATION_PLAN.md content as a beautiful sectioned task list. */
+function buildPlanContentHtml(planContent: string, isActive: boolean, archivedCycles: Array<{ cycle: number; content: string }>): string {
+  const renderPlan = (content: string, active: boolean): string => {
+    if (!content.trim()) return `<p class="empty-state">Plan file is empty.</p>`;
+    const { sections, total, done } = parsePlanSections(content, active);
+    if (total === 0) return `<div class="card plan-markdown">${simpleMarkdownToHtml(content)}</div>`;
+
+    const pct = Math.round((done / total) * 100);
+    const progressHtml = `
+    <div class="progress-wrap">
+      <div class="progress-meta">
+        <span>Tasks complete: <strong>${done} / ${total}</strong></span>
+        <strong>${pct}%</strong>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+
+    const sectionsHtml = sections.map(sec => {
+      if (sec.tasks.length === 0 && !sec.heading && sec.notes.length === 0) return "";
+      const tag = sec.level <= 1 ? "h2" : sec.level === 2 ? "h3" : "h4";
+      const headingHtml = sec.heading
+        ? `<div class="plan-sec-heading level-${sec.level}"><${tag}>${escapeHtml(sec.heading)}</${tag}></div>` : "";
+      const notesHtml = sec.notes.length
+        ? `<p class="plan-sec-note">${sec.notes.map(n => escapeHtml(n)).join(" ")}</p>` : "";
+      const tasksHtml = sec.tasks.map(t => {
+        const icon = t.status === "done" ? "✓" : t.status === "active" ? "▶" : "○";
+        const label = t.status === "done" ? "done" : t.status === "active" ? "in progress" : "pending";
+        return `<div class="task-item ${t.status}">
+          <div class="task-icon-wrap ${t.status}">${icon}</div>
+          <span class="task-text">${escapeHtml(t.text)}</span>
+          <span class="task-status-label">${label}</span>
+        </div>`;
+      }).join("");
+      return `<div class="plan-section">
+        ${headingHtml}${notesHtml}
+        ${tasksHtml ? `<div class="task-list">${tasksHtml}</div>` : ""}
+      </div>`;
+    }).join("");
+
+    return `${progressHtml}<div class="plan-sections">${sectionsHtml}</div>`;
+  };
+
+  const currentHtml = planContent
+    ? renderPlan(planContent, isActive)
+    : `<p class="empty-state">No <code>IMPLEMENTATION_PLAN.md</code> found. Run Ralph with <code>--plan</code> to have the agent create one.</p>`;
+
+  const archivedHtml = archivedCycles.length > 0
+    ? archivedCycles.map(a => `
+      <details class="plan-archived">
+        <summary class="plan-archived-summary">📦 Archived — Cycle ${a.cycle}</summary>
+        <div class="plan-archived-body">${renderPlan(a.content, false)}</div>
+      </details>`).join("")
+    : "";
+
+  return `<div id="plan-content">${currentHtml}</div>${archivedHtml}`;
+}
+
 /** Parse IMPLEMENTATION_PLAN.md checkboxes for progress.
  *  Each task gets status: "done" | "active" | "pending".
  *  When isActive=true the first unchecked item becomes "active". */
@@ -889,6 +990,47 @@ const GLOBAL_CSS = `
     flex-shrink: 0;
   }
   .task-item.active .task-status-label { opacity: 1; color: var(--warning); }
+
+  /* ── Plan page sections ──────────────────────────────────── */
+  .plan-sections { display: flex; flex-direction: column; gap: 6px; }
+  .plan-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px 10px;
+  }
+  .plan-sec-heading { margin-bottom: 6px; }
+  .plan-sec-heading h2 { font-size: 14px; font-weight: 700; color: var(--text); margin: 0; }
+  .plan-sec-heading h3 { font-size: 13px; font-weight: 600; color: var(--text); margin: 0; }
+  .plan-sec-heading h4 { font-size: 12px; font-weight: 600; color: var(--text-muted); margin: 0; }
+  .plan-sec-heading.level-1 h2 { font-size: 15px; color: var(--accent); }
+  .plan-sec-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 8px;
+    line-height: 1.5;
+  }
+  .plan-section .task-list { margin-top: 8px; }
+  .plan-markdown { font-size: 13px; line-height: 1.7; }
+  .plan-archived {
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .plan-archived-summary {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    background: var(--surface);
+    user-select: none;
+    list-style: none;
+  }
+  .plan-archived-summary:hover { color: var(--text); background: var(--surface-2); }
+  .plan-archived-body { padding: 14px 16px; }
+  .plan-archived-body .progress-wrap { margin-bottom: 10px; }
 
   .timeline { display: flex; flex-direction: column; gap: 0; }
   .tl-item {
@@ -1823,27 +1965,49 @@ function projectSelectorBar(projectCwd: string, isWindows: boolean): string {
   </script>`;
 }
 
+function loadArchivedCycles(projectCwd: string): Array<{ cycle: number; content: string }> {
+  const result: Array<{ cycle: number; content: string }> = [];
+  try {
+    for (const f of readdirSync(projectCwd)) {
+      const m = f.match(/^IMPLEMENTATION_PLAN\.cycle(\d+)\.md$/);
+      if (m) result.push({ cycle: parseInt(m[1]), content: readFileSafe(join(projectCwd, f)) });
+    }
+    result.sort((a, b) => b.cycle - a.cycle);
+  } catch { /* ignore read errors */ }
+  return result;
+}
+
 function routePlan(cwd: string): string {
   const projectCwd = loadCurrentProject(cwd);
   const state = loadState(projectCwd);
+  const isActive = state?.active === true;
   const IS_WIN = process.platform === "win32";
   const selectorBar = projectSelectorBar(projectCwd, IS_WIN);
-  const p = planPath(projectCwd);
-  if (!existsSync(p)) {
-    return htmlPage("Plan", `
-      <div class="page-header"><h1>📋 Implementation Plan</h1></div>
-      ${selectorBar}
-      <p class="empty-state">No <code>IMPLEMENTATION_PLAN.md</code> found in this project. Run Ralph with <code>--plan</code> to have the agent create one.</p>
-    `, "/plan", "", state, projectCwd);
-  }
-  const content = readFileSafe(p);
+  const planContent = readFileSafe(planPath(projectCwd));
+  const archived = loadArchivedCycles(projectCwd);
+
   return htmlPage("Plan", `
     <div class="page-header">
-      <h1>📋 Implementation Plan</h1>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h1>📋 Implementation Plan</h1>
+        ${isActive ? `<span class="badge badge-green" style="font-size:11px">● Live — updates every 3s</span>` : ""}
+        <button class="btn btn-ghost btn-sm" onclick="location.reload()">↻ Refresh</button>
+      </div>
       <p class="page-subtitle">IMPLEMENTATION_PLAN.md — maintained by the agent</p>
     </div>
     ${selectorBar}
-    <div class="card">${simpleMarkdownToHtml(content)}</div>
+    ${buildPlanContentHtml(planContent, isActive, archived)}
+    <script>
+      ${isActive ? `
+      let _planRefresh = setInterval(async () => {
+        try {
+          const resp = await fetch('/api/plan-data');
+          const d = await resp.json();
+          document.getElementById('plan-content').innerHTML = d.planHtml;
+          if (!d.isActive) clearInterval(_planRefresh);
+        } catch {}
+      }, 3000);` : ""}
+    </script>
   `, "/plan", "", state, projectCwd);
 }
 
@@ -2379,6 +2543,62 @@ function routeApiActivityData(cwd: string): Response {
   );
 }
 
+// ─── Route: GET /api/plan-data ────────────────────────────────────────────────
+
+function routeApiPlanData(cwd: string): Response {
+  const projectCwd = loadCurrentProject(cwd);
+  const state = loadState(projectCwd);
+  const isActive = state?.active === true;
+  const planContent = readFileSafe(planPath(projectCwd));
+  // Return just the inner plan content HTML (the #plan-content div's innerHTML)
+  const { sections, total, done } = planContent
+    ? parsePlanSections(planContent, isActive)
+    : { sections: [], total: 0, done: 0 };
+
+  let planHtml: string;
+  if (!planContent.trim()) {
+    planHtml = `<p class="empty-state">No <code>IMPLEMENTATION_PLAN.md</code> found.</p>`;
+  } else if (total === 0) {
+    planHtml = `<div class="card plan-markdown">${simpleMarkdownToHtml(planContent)}</div>`;
+  } else {
+    const pct = Math.round((done / total) * 100);
+    const progressHtml = `
+    <div class="progress-wrap">
+      <div class="progress-meta">
+        <span>Tasks complete: <strong>${done} / ${total}</strong></span>
+        <strong>${pct}%</strong>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+    const sectionsHtml = sections.map(sec => {
+      if (sec.tasks.length === 0 && !sec.heading && sec.notes.length === 0) return "";
+      const tag = sec.level <= 1 ? "h2" : sec.level === 2 ? "h3" : "h4";
+      const headingHtml = sec.heading
+        ? `<div class="plan-sec-heading level-${sec.level}"><${tag}>${escapeHtml(sec.heading)}</${tag}></div>` : "";
+      const notesHtml = sec.notes.length
+        ? `<p class="plan-sec-note">${sec.notes.map(n => escapeHtml(n)).join(" ")}</p>` : "";
+      const tasksHtml = sec.tasks.map(t => {
+        const icon = t.status === "done" ? "✓" : t.status === "active" ? "▶" : "○";
+        const label = t.status === "done" ? "done" : t.status === "active" ? "in progress" : "pending";
+        return `<div class="task-item ${t.status}">
+          <div class="task-icon-wrap ${t.status}">${icon}</div>
+          <span class="task-text">${escapeHtml(t.text)}</span>
+          <span class="task-status-label">${label}</span>
+        </div>`;
+      }).join("");
+      return `<div class="plan-section">
+        ${headingHtml}${notesHtml}
+        ${tasksHtml ? `<div class="task-list">${tasksHtml}</div>` : ""}
+      </div>`;
+    }).join("");
+    planHtml = `${progressHtml}<div class="plan-sections">${sectionsHtml}</div>`;
+  }
+
+  return new Response(JSON.stringify({ planHtml, isActive }), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 // ─── Route: GET /api/console-log ─────────────────────────────────────────────
 
 function routeApiConsoleLog(cwd: string): Response {
@@ -2570,6 +2790,7 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
       if (path === "/console")            return html(routeConsole(cwd));
       if (path === "/api/console-log")    return routeApiConsoleLog(cwd);
       if (path === "/api/activity-data")  return routeApiActivityData(cwd);
+      if (path === "/api/plan-data")      return routeApiPlanData(cwd);
       if (path === "/api/set-project" && req.method === "POST") return routeApiSetProject(req, cwd);
       if (path === "/intervene") {
         if (req.method === "POST") return routeIntervenePost(req, cwd);
