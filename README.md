@@ -76,6 +76,7 @@ done
 - **Git Self-Diagnosis** — Automatically scans recent commits for `TODO`, `FIXME`, `ERROR`, `FAIL`, `BUG`, `BROKEN`, `HACK` keywords and injects a warning section into every prompt
 - **Web Dashboard** — `ralph dashboard` opens a full dark web UI to launch loops, monitor progress, view plans/logs, inject context, and stop runs — all from the browser
 - **Plan Mode** — `--plan` keeps `IMPLEMENTATION_PLAN.md` and `activity.md` in sync across iterations
+- **Improving Mode** — `--improving [N]` keeps running after the task is done; each cycle ralph autonomously picks the most valuable improvement (design, performance, tests, security, features, etc.) and implements it. Works on existing projects too: `ralph --improving 5`
 - **Task Tracking** — `--tasks` mode breaks complex projects into a managed checklist
 - **Presets** — `--preset NAME` loads saved prompt/config combos from `presets.json`
 - **Local Model Support** — built-in `llm` agent + `--base-url` for any OpenAI-compatible API; `--optimize` and `--max-prompt-tokens` tune the prompt for small models; Ollama model list auto-detected when `--model` is omitted
@@ -149,6 +150,12 @@ ralph "Fix the failing tests" \
 ralph "Build a full-stack web app with user auth and database" \
   --plan --max-iterations 50
 
+# Build, then auto-improve 5 times
+ralph "Build a REST API" --plan --improving 5
+
+# Improve an existing project (no initial task needed)
+ralph --improving 3 --plan
+
 # Load a saved preset
 ralph --preset my_api_task
 
@@ -196,6 +203,38 @@ ralph dashboard [--port N] [--open]
 | `--optimize` | Strip all non-essential prompt sections (git diagnosis, plan files, verbose instructions). Recommended for small/weak local models |
 | `--diff` | Inject `git diff HEAD~1` into every prompt so the agent can see exactly what it changed in the previous iteration |
 | `--max-prompt-tokens N` | Truncate the prompt to ~N tokens. Keeps the task (start) and completion signal (end); removes middle sections |
+| `--improving [N]` | Improving Mode — see below |
+
+### Improving Mode
+
+After the initial task is done, `--improving` keeps the loop running. Each cycle ralph autonomously picks the most valuable improvement area and implements it — no human input needed.
+
+```bash
+# Build a project, then run 5 improvement cycles
+ralph "Build a todo app" --plan --improving 5
+
+# Unlimited improvement cycles (runs until Ctrl+C or --max-iterations)
+ralph "Create a REST API" --plan --improving
+
+# Improve an existing project — no initial task needed
+ralph --improving 5 --plan
+
+# Quick polish pass without plan files
+ralph --improving 2
+```
+
+**What ralph improves each cycle (agent's choice):**
+- 🏗 Architecture & design — better abstractions, cleaner separation of concerns
+- ⚡ Performance — speed up slow paths, reduce memory, optimize algorithms
+- 🎨 User experience — interface, visual design, usability, feedback
+- ✅ Reliability — tests, error handling, edge cases, validation
+- 🔒 Security — input hardening, vulnerability fixes, dependency audits
+- 📖 Code quality — refactoring, naming, documentation
+- ✨ New features — whatever adds the most value
+
+With `--plan`, each cycle archives the previous `IMPLEMENTATION_PLAN.md` as `IMPLEMENTATION_PLAN.cycle{N}.md` and creates a fresh plan for the new improvement focus.
+
+**Dashboard:** The Launch form has an `--improving` checkbox and an optional cycle count field. The Status and Activity pages show the current cycle number as a `🔧 Cycle N / M` badge.
 
 ### Multi-Agent Rotation
 

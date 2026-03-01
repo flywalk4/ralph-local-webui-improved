@@ -458,7 +458,10 @@ Arguments:
                       to improve (design, perf, tests, features, etc.) and implements it.
                       N = number of cycles (default: unlimited). With --plan, each cycle
                       gets a fresh IMPLEMENTATION_PLAN.md (old one archived as .cycle{N}.md)
-                      Example: ralph "build a todo app" --plan --improving 5
+                      Omit the prompt to improve an existing project without a prior task:
+                        ralph --improving 5 --plan
+                      Combined with initial task:
+                        ralph "build a todo app" --plan --improving 5
   --optimize          Optimize for small/weak models: strips git diagnosis, plan sections,
                       and verbose instructions — sends a minimal focused prompt instead
   --diff              Inject git diff of the previous iteration into every prompt so the
@@ -1413,6 +1416,9 @@ if (!prompt) {
   const existingState = loadState();
   if (existingState?.active) {
     prompt = existingState.prompt;
+  } else if (improvingMode) {
+    // Improving-only mode: no initial task — start directly in improvement cycle 1
+    prompt = buildImprovingPrompt(1, improvingMax);
   } else {
     console.error("Error: No prompt provided");
     console.error("Usage: ralph \"Your task description\" [options]");
@@ -2513,7 +2519,9 @@ async function runRalphLoop(): Promise<void> {
     maxPromptTokens: maxPromptTokens || undefined,
     improvingMode: improvingMode || undefined,
     improvingMax: improvingMode ? improvingMax : undefined,
-    improvingCycle: improvingMode ? 0 : undefined,
+    // improving-only (no initial task): start at cycle 1 so the first
+    // completion triggers cycle 2, not a redundant "cycle 0" exit
+    improvingCycle: improvingMode ? (promptParts.length || promptFile ? 0 : 1) : undefined,
   };
 
   if (!resuming) {
