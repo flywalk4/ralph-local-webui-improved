@@ -1739,10 +1739,16 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
         status.textContent = 'Sending to LLM…';
 
         try {
+          const agent = document.getElementById('agent').value.trim();
           const resp = await fetch('/api/enrich-prompt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: rawPrompt, baseUrl: baseUrl || undefined, model: model || undefined }),
+            body: JSON.stringify({
+              prompt:  rawPrompt,
+              agent:   agent   || undefined,
+              model:   model   || undefined,
+              baseUrl: baseUrl || undefined,
+            }),
           });
           const d = await resp.json();
           if (d.error) {
@@ -2824,7 +2830,7 @@ function buildEnrichmentContext(projectCwd: string): string {
 }
 
 async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Response> {
-  let body: { prompt?: string; baseUrl?: string; model?: string } = {};
+  let body: { prompt?: string; baseUrl?: string; model?: string; agent?: string } = {};
   try { body = await req.json(); } catch {
     return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: { "Content-Type": "application/json" } });
   }
@@ -2834,27 +2840,26 @@ async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Re
     return new Response(JSON.stringify({ error: "prompt is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
   }
 
-  // Resolve API base
-  const baseUrl = String(body.baseUrl ?? "").trim().replace(/\/+$/, "");
-  let apiBase: string | null = null;
-  if (baseUrl) {
-    apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
-  } else if (process.env.OPENAI_API_KEY) {
-    apiBase = "https://api.openai.com/v1";
-  } else if (process.env.ANTHROPIC_API_KEY) {
-    // Use OpenAI-compatible proxy isn't available for Anthropic directly,
-    // but claude-code users likely have the key — fall through to error
-  }
+  const baseUrl  = String(body.baseUrl ?? "").trim().replace(/\/+$/, "");
+  const agent    = String(body.agent  ?? "").trim();
+  const modelRaw = String(body.model  ?? "").trim();
 
-  if (!apiBase) {
-    return new Response(
-      JSON.stringify({ error: "No LLM API configured. Enter a Base URL (e.g. http://localhost:11434/v1) or set OPENAI_API_KEY." }),
-      { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
+  // Determine backend: base-url → OpenAI-compat; claude-code / claude-* model → Anthropic; fallback → OpenAI
+  const useAnthropicKey =
+    !baseUrl &&
+    (agent === "claude-code" || modelRaw.toLowerCase().startsWith("claude")) &&
+    !!process.env.ANTHROPIC_API_KEY;
 
-  const apiKey = process.env.OPENAI_API_KEY ?? "local";
-  const model = String(body.model ?? "").trim() || (baseUrl ? undefined : "gpt-4o-mini");
+  const useOpenAICompat = !!baseUrl || (!useAnthropicKey && !!process.env.OPENAI_API_KEY);
+
+  if (!useAnthropicKey && !useOpenAICompat) {
+    const hint = (agent === "claude-code" || modelRaw.toLowerCase().startsWith("claude"))
+      ? "Set ANTHROPIC_API_KEY, or enter a Base URL."
+      : "Enter a Base URL (e.g. http://localhost:11434/v1) or set OPENAI_API_KEY.";
+    return new Response(JSON.stringify({ error: `No LLM API configured. ${hint}` }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const projectCwd = loadCurrentProject(serverCwd);
   const context = buildEnrichmentContext(projectCwd);
@@ -2873,30 +2878,63 @@ Rules:
 - 2–6 sentences is ideal`;
 
   try {
-    const resp = await fetch(`${apiBase}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: model ?? "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: rawPrompt },
-        ],
-        max_tokens: 600,
-        temperature: 0.3,
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
+    let enriched = "";
 
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => "");
-      return new Response(JSON.stringify({ error: `LLM API error ${resp.status}: ${txt.slice(0, 200)}` }), {
-        status: 502, headers: { "Content-Type": "application/json" },
+    if (useAnthropicKey) {
+      // ── Anthropic Messages API ────────────────────────────────────
+      const model = modelRaw || "claude-haiku-4-5-20251001";
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ANTHROPIC_API_KEY!,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 600,
+          system: systemPrompt,
+          messages: [{ role: "user", content: rawPrompt }],
+        }),
+        signal: AbortSignal.timeout(30_000),
       });
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => "");
+        return new Response(JSON.stringify({ error: `Anthropic API error ${resp.status}: ${txt.slice(0, 200)}` }), {
+          status: 502, headers: { "Content-Type": "application/json" },
+        });
+      }
+      const data = await resp.json() as { content?: Array<{ type: string; text?: string }> };
+      enriched = data?.content?.find(b => b.type === "text")?.text?.trim() ?? "";
+    } else {
+      // ── OpenAI-compatible API ─────────────────────────────────────
+      const apiBase = baseUrl ? (baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`) : "https://api.openai.com/v1";
+      const apiKey  = process.env.OPENAI_API_KEY ?? "local";
+      const model   = modelRaw || (baseUrl ? undefined : "gpt-4o-mini");
+      const resp = await fetch(`${apiBase}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: model ?? "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: rawPrompt },
+          ],
+          max_tokens: 600,
+          temperature: 0.3,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => "");
+        return new Response(JSON.stringify({ error: `LLM API error ${resp.status}: ${txt.slice(0, 200)}` }), {
+          status: 502, headers: { "Content-Type": "application/json" },
+        });
+      }
+      const data = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
+      enriched = data?.choices?.[0]?.message?.content?.trim() ?? "";
     }
 
-    const data = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const enriched = data?.choices?.[0]?.message?.content?.trim() ?? "";
     if (!enriched) {
       return new Response(JSON.stringify({ error: "Empty response from LLM" }), { status: 502, headers: { "Content-Type": "application/json" } });
     }
