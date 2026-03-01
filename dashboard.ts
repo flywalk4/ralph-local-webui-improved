@@ -3,8 +3,8 @@
  * Ralph Wiggum Dashboard — Full-featured web UI for launching and monitoring Ralph loops.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, readdirSync } from "fs";
+import { join, resolve, dirname } from "path";
 
 // ─── Path constants ───────────────────────────────────────────────────────────
 
@@ -670,6 +670,91 @@ const GLOBAL_CSS = `
   details summary { cursor: pointer; color: var(--text-muted); font-size: 12px; user-select: none; }
   details summary:hover { color: var(--text); }
 
+  /* ── Directory browser modal ─────────────────────────────────── */
+  .dir-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+  }
+  .dir-modal-overlay.open { display: flex; }
+  .dir-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 520px;
+    max-width: 94vw;
+    max-height: 72vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  }
+  .dir-modal-header {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .dir-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .dir-modal-close:hover { color: var(--text); }
+  .dir-modal-path {
+    padding: 8px 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border-sub);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    word-break: break-all;
+    flex-shrink: 0;
+    min-height: 30px;
+  }
+  .dir-modal-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+  }
+  .dir-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    user-select: none;
+    transition: background 0.1s;
+  }
+  .dir-item:hover { background: var(--surface-2); }
+  .dir-item-icon { flex-shrink: 0; font-size: 14px; }
+  .dir-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dir-item-up { color: var(--text-muted); }
+  .dir-modal-footer {
+    padding: 11px 14px;
+    border-top: 1px solid var(--border-sub);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+
   .readme-body p[align=center], .readme-body div[align=center] { text-align: center; }
   .readme-body h1[align=center], .readme-body h3[align=center] { text-align: center; }
   .readme-body p { margin: 8px 0; color: var(--text); }
@@ -942,9 +1027,13 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
           </div>
           <div class="form-group">
             <label for="cwd">Project directory</label>
-            <input type="text" name="cwd" id="cwd"
-              value="${escapeHtml(cwd)}"
-              placeholder="${escapeHtml(cwd)}">
+            <div class="input-row">
+              <input type="text" name="cwd" id="cwd"
+                value="${escapeHtml(cwd)}"
+                placeholder="${escapeHtml(cwd)}">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openDirModal()"
+                title="Browse for a directory">📁 Browse</button>
+            </div>
           </div>
         </div>
       </div>
@@ -957,8 +1046,86 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
 
     </form>
 
+    <!-- Directory browser modal -->
+    <div class="dir-modal-overlay" id="dir-modal">
+      <div class="dir-modal">
+        <div class="dir-modal-header">
+          📁 Select Project Directory
+          <button class="dir-modal-close" onclick="closeDirModal()">×</button>
+        </div>
+        <div class="dir-modal-path" id="dir-current-path"></div>
+        <div class="dir-modal-list" id="dir-list"></div>
+        <div class="dir-modal-footer">
+          <button class="btn btn-primary btn-sm" onclick="selectCurrentDir()">Select this folder</button>
+          <button class="btn btn-ghost btn-sm" onclick="closeDirModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <script>
-      // Disable optimize for agents other than llm
+      const initialCwd = ${JSON.stringify(cwd)};
+      let currentBrowsePath = initialCwd;
+
+      // ── Directory browser ─────────────────────────────────────────
+      function openDirModal() {
+        const cwdInput = document.getElementById('cwd').value.trim() || initialCwd;
+        document.getElementById('dir-modal').classList.add('open');
+        browseTo(cwdInput);
+      }
+      function closeDirModal() {
+        document.getElementById('dir-modal').classList.remove('open');
+      }
+      function selectCurrentDir() {
+        document.getElementById('cwd').value = currentBrowsePath;
+        closeDirModal();
+      }
+      async function browseTo(path) {
+        const pathEl = document.getElementById('dir-current-path');
+        const listEl = document.getElementById('dir-list');
+        pathEl.textContent = 'Loading…';
+        listEl.innerHTML = '';
+        try {
+          const resp = await fetch('/api/browse?path=' + encodeURIComponent(path));
+          const data = await resp.json();
+          if (data.error) { pathEl.textContent = 'Error: ' + data.error; return; }
+          currentBrowsePath = data.current;
+          pathEl.textContent = data.current;
+          if (data.parent) {
+            const up = document.createElement('div');
+            up.className = 'dir-item dir-item-up';
+            up.innerHTML = '<span class="dir-item-icon">⬆</span><span class="dir-item-name">.. (parent)</span>';
+            up.onclick = () => browseTo(data.parent);
+            listEl.appendChild(up);
+          }
+          if (data.dirs.length === 0 && !data.parent) {
+            listEl.innerHTML = '<p style="color:var(--text-muted);padding:12px;font-size:13px">No subdirectories.</p>';
+          } else {
+            data.dirs.forEach(d => {
+              const item = document.createElement('div');
+              item.className = 'dir-item';
+              const icon = d.name.startsWith('.') ? '📂' : '📁';
+              item.innerHTML = '<span class="dir-item-icon">' + icon + '</span>'
+                             + '<span class="dir-item-name">' + d.name + '</span>';
+              item.ondblclick = () => browseTo(d.path);
+              item.onclick = () => {
+                listEl.querySelectorAll('.dir-item').forEach(el => el.style.background = '');
+                item.style.background = 'var(--accent-dim)';
+                currentBrowsePath = d.path;
+                document.getElementById('dir-current-path').textContent = d.path;
+              };
+              listEl.appendChild(item);
+            });
+          }
+        } catch (e) {
+          pathEl.textContent = 'Failed to load: ' + e.message;
+        }
+      }
+      // Close modal on overlay click
+      document.getElementById('dir-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeDirModal();
+      });
+
+      // ── Optimize toggle ───────────────────────────────────────────
       const agentSel = document.getElementById('agent');
       const optimizeLabel = document.getElementById('optimize-label');
       function updateOptimize() {
@@ -970,7 +1137,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
       agentSel.addEventListener('change', updateOptimize);
       updateOptimize();
 
-      // Fetch Ollama models
+      // ── Ollama model fetch ────────────────────────────────────────
       async function fetchModels() {
         const url = document.getElementById('base-url').value.trim();
         if (!url) { alert('Enter a Base URL first (e.g. http://localhost:11434/v1)'); return; }
@@ -997,10 +1164,9 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
         }
       }
 
-      // Confirm if a loop is already active
+      // ── Warn if loop already running ──────────────────────────────
       document.getElementById('launch-form').addEventListener('submit', function(e) {
-        const hasWarning = document.querySelector('.alert-warning');
-        if (hasWarning) {
+        if (document.querySelector('.alert-warning')) {
           if (!confirm('A loop is already running. Launch another anyway?')) {
             e.preventDefault();
           }
@@ -1304,6 +1470,50 @@ function routeReadme(cwd: string): string {
   `, "/readme", "", state);
 }
 
+// ─── Route: GET /api/browse ───────────────────────────────────────────────────
+
+function routeApiBrowse(req: Request): Response {
+  const requested = new URL(req.url).searchParams.get("path") ?? process.cwd();
+  let targetPath: string;
+  try {
+    targetPath = resolve(requested);
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid path" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    const entries = readdirSync(targetPath, { withFileTypes: true });
+    const dirs = entries
+      .filter(e => e.isDirectory())
+      .map(e => ({ name: e.name, path: join(targetPath, e.name) }))
+      .sort((a, b) => {
+        // hidden dirs (dot) go last
+        const aHidden = a.name.startsWith(".");
+        const bHidden = b.name.startsWith(".");
+        if (aHidden !== bHidden) return aHidden ? 1 : -1;
+        return a.name.localeCompare(b.name);
+      });
+
+    const parent = dirname(targetPath);
+    return new Response(
+      JSON.stringify({
+        current: targetPath,
+        parent: parent !== targetPath ? parent : null,
+        dirs,
+      }),
+      { headers: { "Content-Type": "application/json" } }
+    );
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
 // ─── Route: POST /launch ──────────────────────────────────────────────────────
 
 async function routeLaunchPost(req: Request, cwd: string): Promise<Response> {
@@ -1400,6 +1610,7 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
       if (path === "/stop" && req.method === "POST") return routeStop(cwd);
       if (path === "/api/status")         return routeApiStatus(cwd);
       if (path === "/api/models")         return routeApiModels(req);
+      if (path === "/api/browse")         return routeApiBrowse(req);
 
       return new Response("Not Found", { status: 404 });
     },
