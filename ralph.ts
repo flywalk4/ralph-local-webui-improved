@@ -45,7 +45,7 @@ type AgentType = (typeof AGENT_TYPES)[number];
 
 type AgentEnvOptions = { filterPlugins?: boolean; allowAllPermissions?: boolean; baseUrl?: string; model?: string };
 
-type AgentBuildArgsOptions = { allowAllPermissions?: boolean; extraFlags?: string[]; streamOutput?: boolean; baseUrl?: string };
+type AgentBuildArgsOptions = { allowAllPermissions?: boolean; extraFlags?: string[]; streamOutput?: boolean; baseUrl?: string; optimize?: boolean };
 
 interface AgentConfig {
   type: AgentType;
@@ -194,6 +194,7 @@ const ARGS_TEMPLATES: Record<string, (prompt: string, model: string, options?: A
     const cmdArgs = [scriptPath, "--message", prompt];
     if (model) cmdArgs.push("--model", model);
     if (options?.baseUrl) cmdArgs.push("--base-url", options.baseUrl);
+    if (options?.optimize) cmdArgs.push("--optimize");
     if (options?.extraFlags?.length) cmdArgs.push(...options.extraFlags);
     return cmdArgs;
   },
@@ -452,6 +453,8 @@ Arguments:
   --tasks, -t         Tasks Mode — work through a checklist in .ralph/ralph-tasks.md
   --task-promise TEXT Phrase that signals one task is done (default: READY_FOR_NEXT_TASK)
   --plan              Plan Mode — agent maintains IMPLEMENTATION_PLAN.md + activity.md;
+  --optimize          Optimize for small/weak models: strips git diagnosis, plan sections,
+                      and verbose instructions — sends a minimal focused prompt instead
                       both files are injected into every iteration's prompt
 
 ── Multi-agent Rotation ─────────────────────────────────────────────────────────
@@ -1021,6 +1024,7 @@ let verboseTools = false;
 let promptSource = "";
 let handleQuestions = true;
 let planMode = false;
+let optimize = false;
 let presetName = "";
 
 const promptParts: string[] = [];
@@ -1162,6 +1166,8 @@ for (let i = 0; i < args.length; i++) {
     handleQuestions = false;
   } else if (arg === "--plan") {
     planMode = true;
+  } else if (arg === "--optimize") {
+    optimize = true;
   } else if (arg === "--preset") {
     const val = args[++i];
     if (!val) {
@@ -1316,6 +1322,7 @@ interface RalphState {
   rotation?: string[];
   rotationIndex?: number;
   planMode?: boolean;
+  optimize?: boolean;
 }
 
 // Create or update state
@@ -1697,6 +1704,15 @@ function buildPrompt(state: RalphState, _agent: AgentConfig, gitIssues: string[]
   if (promptTemplatePath) {
     const customPrompt = loadCustomPromptTemplate(promptTemplatePath, state);
     if (customPrompt) return customPrompt;
+  }
+
+  // Optimized prompt for small/weak models: minimal context, no noise, signal at the end
+  if (state.optimize) {
+    const context = loadContext();
+    const contextLine = context ? `\nAdditional context: ${context}\n` : "";
+    return `Task: ${state.prompt}${contextLine}
+When the task is done, output this exact line:
+<promise>${state.completionPromise}</promise>`.trim();
   }
 
   const context = loadContext();
@@ -2236,6 +2252,7 @@ async function runRalphLoop(): Promise<void> {
     agentType = existingState.agent;
     rotation = existingState.rotation ?? null;
     planMode = existingState.planMode ?? false;
+    optimize = existingState.optimize ?? false;
     console.log(`🔄 Resuming Ralph loop from ${statePath}`);
   }
 
@@ -2300,6 +2317,7 @@ async function runRalphLoop(): Promise<void> {
     rotation: rotation ?? undefined,
     rotationIndex: rotationActive ? 0 : undefined,
     planMode: planMode || undefined,
+    optimize: optimize || undefined,
   };
 
   if (!resuming) {
@@ -2429,6 +2447,7 @@ async function runRalphLoop(): Promise<void> {
         extraFlags: extraAgentFlags,
         streamOutput,
         baseUrl: state.baseUrl,
+        optimize: state.optimize,
       });
 
       const env = agentConfig.buildEnv({

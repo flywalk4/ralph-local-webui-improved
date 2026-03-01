@@ -23,6 +23,7 @@ const args = process.argv.slice(2);
 let message = "";
 let model = "";
 let baseUrl = "";
+let optimizeMode = false;
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -32,6 +33,8 @@ for (let i = 0; i < args.length; i++) {
     model = args[++i] ?? "";
   } else if (arg === "--base-url") {
     baseUrl = args[++i] ?? "";
+  } else if (arg === "--optimize") {
+    optimizeMode = true;
   }
 }
 
@@ -83,6 +86,16 @@ Do NOT output the completion token early — only emit it when all work is genui
 - Use markdown for explanations and summaries
 - Do not use any other XML-like tags besides <file> and <promise> — they will be misinterpreted`;
 
+// Stripped-down system prompt for small/weak models — fewer rules = less confusion
+const SYSTEM_PROMPT_OPTIMIZED = `Complete the coding task given by the user.
+
+To write a file use this format:
+<file path="relative/path">
+file contents here
+</file>
+
+Output the completion signal from the task when you are done. Do not output it early.`;
+
 // ── Call the API ─────────────────────────────────────────────────────────────
 
 const endpoint = `${apiBase}/chat/completions`;
@@ -98,7 +111,7 @@ try {
     body: JSON.stringify({
       model: resolvedModel,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: optimizeMode ? SYSTEM_PROMPT_OPTIMIZED : SYSTEM_PROMPT },
         { role: "user", content: message },
       ],
       stream: false,
