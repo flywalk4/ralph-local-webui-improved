@@ -73,7 +73,7 @@ done
 - **Multi-Agent Support** — Use Claude Code, Codex, Copilot CLI, Aider, or OpenCode with the same workflow
 - **Self-Correcting Loops** — Agent sees its previous work and fixes its own mistakes
 - **Git Self-Diagnosis** — Automatically scans recent commits for `TODO`, `FIXME`, `ERROR`, `FAIL`, `BUG`, `BROKEN`, `HACK` keywords and injects a warning section into every prompt
-- **Web Dashboard** — `ralph dashboard` starts a local web UI to monitor the loop, view planning files, read logs, and inject context without stopping the loop
+- **Web Dashboard** — `ralph dashboard` opens a full dark web UI to launch loops, monitor progress, view plans/logs, inject context, and stop runs — all from the browser
 - **Plan Mode** — `--plan` keeps `IMPLEMENTATION_PLAN.md` and `activity.md` in sync across iterations
 - **Task Tracking** — `--tasks` mode breaks complex projects into a managed checklist
 - **Presets** — `--preset NAME` loads saved prompt/config combos from `presets.json`
@@ -291,7 +291,7 @@ ralph "Build API" -- --extra-agent-flag value
 
 ## Web Dashboard
 
-`ralph dashboard` starts a local Bun HTTP server for monitoring and intervention:
+`ralph dashboard` opens a full-featured dark web UI for launching loops, monitoring progress, and intervening mid-run — all without touching the terminal.
 
 ```bash
 ralph dashboard               # Start on http://localhost:5000
@@ -305,22 +305,57 @@ Run the dashboard in one terminal while the loop runs in another:
 # Terminal 1 — run the loop
 ralph "Build a REST API" --plan --max-iterations 30
 
-# Terminal 2 — watch it live
+# Terminal 2 — open the dashboard
 ralph dashboard --open
 ```
 
-### Dashboard Pages
+### Launch page
+
+Compose and fire off a ralph loop entirely from the browser — no CLI needed.
+
+<img src="screenshots/dashboard-launch.png" alt="Dashboard Launch page" width="100%">
+
+Every CLI option is available as a form control:
+
+- **Prompt** — full task description textarea
+- **Agent & Model** — dropdown for all 6 agent types, model text input, Base URL field with **↓ Models** button that fetches available models directly from Ollama (or any OpenAI-compatible endpoint)
+- **Rotation** — cycle through agent:model pairs each iteration
+- **Iteration control** — max/min iterations, completion signal, abort signal, max prompt tokens
+- **Modes** — `--plan`, `--tasks`, `--optimize`, `--diff` checkboxes
+- **Options** — `--allow-all`, `--no-commit`, `--no-plugins`, `--no-stream`, `--verbose-tools`, `--no-questions`
+- **Advanced** — preset name, project directory (with **📁 Browse** file explorer modal)
+
+### Status page
+
+<img src="screenshots/dashboard-status.png" alt="Dashboard Status page" width="100%">
+
+Shows the active loop state with live polling (auto-refreshes every 5 seconds while a loop is running):
+
+- Current iteration, agent, model, base URL
+- Elapsed time, started timestamp, completion signal
+- Plan mode / tasks mode indicators
+- **⏹ Stop Loop** button to terminate the running process
+- Per-iteration history: duration, completion ✓/✗, tools used
+
+### Logs page
+
+<img src="screenshots/dashboard-logs.png" alt="Dashboard Logs page" width="100%">
+
+Detailed breakdown of the last 10 iterations — duration, agent/model, exit code, files modified, errors, and full tool usage JSON.
+
+### Intervene page
+
+<img src="screenshots/dashboard-intervene.png" alt="Dashboard Intervene page" width="100%">
+
+Inject a plain-text context note that gets prepended to the next iteration's prompt, then cleared automatically. Useful for nudging the agent mid-task without stopping the loop.
+
+### Other pages
 
 | Route | Description |
 |-------|-------------|
-| `/status` | Active loop state, iteration count, elapsed time, recent history |
-| `/plan` | Live view of `IMPLEMENTATION_PLAN.md` |
-| `/activity` | Last 100 lines of `activity.md` |
-| `/logs` | Detailed last 10 iterations: tools used, files modified, errors |
-| `/intervene` | Form to inject a context note into the next iteration's prompt |
-| `/readme` | This documentation — how ralph works, all commands & examples |
-
-The `/readme` page always reads the installed `README.md` directly from the ralph package, so it stays in sync with whatever version is installed.
+| `/plan` | Live markdown view of `IMPLEMENTATION_PLAN.md` |
+| `/activity` | Last 120 lines of `activity.md`, auto-reloads every 10s when active |
+| `/readme` | Full documentation rendered from the installed `README.md` |
 
 ---
 

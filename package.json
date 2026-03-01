@@ -18,6 +18,7 @@
     "completion.ts",
     "dashboard.ts",
     "ralph-logo.png",
+    "screenshots/",
     "README.md",
     "LICENSE",
     "install.sh",
