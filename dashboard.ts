@@ -1413,7 +1413,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
             <label for="cwd">Project directory</label>
             <div class="input-row">
               <input type="text" name="cwd" id="cwd"
-                value="${escapeHtml(cwd)}"
+                value="${escapeHtml(loadCurrentProject(cwd))}"
                 placeholder="${escapeHtml(cwd)}">
               <button type="button" class="btn btn-ghost btn-sm" onclick="openDirModal()"
                 title="Browse for a directory">📁 Browse</button>
@@ -1448,7 +1448,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
     </div>
 
     <script>
-      const initialCwd = ${JSON.stringify(cwd)};
+      const initialCwd = ${JSON.stringify(loadCurrentProject(cwd))};
       let currentBrowsePath = initialCwd;
 
       // ── Directory browser ─────────────────────────────────────────
@@ -1464,6 +1464,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
             const data = await resp.json();
             if (data.path) {
               document.getElementById('cwd').value = data.path;
+              fetch('/api/set-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd: data.path }) }).catch(() => {});
               loadProjectInfo(data.path);
             }
             // if cancelled, do nothing
@@ -1485,6 +1486,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
       function selectCurrentDir() {
         document.getElementById('cwd').value = currentBrowsePath;
         closeDirModal();
+        fetch('/api/set-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd: currentBrowsePath }) }).catch(() => {});
         loadProjectInfo(currentBrowsePath);
       }
       async function browseTo(path) {
@@ -1585,17 +1587,15 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
       let _projInfoTimer = null;
       document.getElementById('cwd').addEventListener('input', function() {
         clearTimeout(_projInfoTimer);
-        _projInfoTimer = setTimeout(() => loadProjectInfo(this.value.trim()), 700);
+        const path = this.value.trim();
+        _projInfoTimer = setTimeout(() => {
+          fetch('/api/set-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd: path }) }).catch(() => {});
+          loadProjectInfo(path);
+        }, 700);
       });
 
       async function loadProjectInfo(path) {
         if (!path) return;
-        // Update global current project on the server
-        fetch('/api/set-project', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cwd: path }),
-        }).catch(() => {});
         const card = document.getElementById('project-card');
         card.style.display = 'block';
         card.innerHTML = '<p class="project-card-loading">⏳ Loading project info…</p>';
