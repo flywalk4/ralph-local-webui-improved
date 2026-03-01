@@ -38,6 +38,25 @@ export function checkTerminalPromise(output: string, promise: string): boolean {
 }
 
 /**
+ * Filter git log lines containing any of the given keywords (case-insensitive).
+ * Pure function — used by parseGitLogIssues in ralph.ts and by tests.
+ */
+export function filterGitLogIssues(logLines: string[], keywords: string[]): string[] {
+  return logLines
+    .filter(line => keywords.some(kw => line.toUpperCase().includes(kw.toUpperCase())))
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Merge preset defaults and preset-specific values for the presets feature.
+ * Defaults are overridden by preset-specific values.
+ */
+export function mergePresetWithDefaults<T extends object>(defaults: Partial<T>, preset: T): T {
+  return { ...defaults, ...preset } as T;
+}
+
+/**
  * Returns true only when there is at least one task checkbox and all checkboxes are complete.
  */
 export function tasksMarkdownAllComplete(tasksMarkdown: string): boolean {

@@ -19,11 +19,14 @@
 </p>
 
 <p align="center">
-  <a href="#supported-agents">Supported Agents</a> •
+  <a href="#supported-agents">Agents</a> •
   <a href="#what-is-open-ralph-wiggum">What is Ralph?</a> •
   <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#commands">Commands</a>
+  <a href="#commands--options">Commands</a> •
+  <a href="#web-dashboard">Dashboard</a> •
+  <a href="#plan-mode">Plan Mode</a> •
+  <a href="#presets">Presets</a>
 </p>
 
 <p align="center">
@@ -43,80 +46,56 @@ Open Ralph Wiggum works with multiple AI coding agents. Switch between them usin
 
 | Agent | Flag | Description |
 |-------|------|-------------|
+| **OpenCode** | `--agent opencode` | Default agent — open-source AI coding assistant |
 | **Claude Code** | `--agent claude-code` | Anthropic's Claude Code CLI for autonomous coding |
 | **Codex** | `--agent codex` | OpenAI's Codex CLI for AI-powered development |
 | **Copilot CLI** | `--agent copilot` | GitHub Copilot CLI for agentic coding |
-| **OpenCode** | `--agent opencode` | Default agent, open-source AI coding assistant |
+| **Aider** | `--agent aider` | Aider AI pair programming (supports local models via `--base-url`) |
 
 ```bash
-# Use Claude Code
 ralph "Build a REST API" --agent claude-code --max-iterations 10
-
-# Use OpenAI Codex
 ralph "Create a CLI tool" --agent codex --max-iterations 10
-
-# Use Copilot CLI
-ralph "Refactor the auth module" --agent copilot --max-iterations 10
-
-# Use OpenCode (default)
-ralph "Fix the failing tests" --max-iterations 10
+ralph "Fix failing tests" --agent aider --model ollama/qwen2.5-coder --base-url http://localhost:11434/v1
 ```
 
 ---
 
 ## What is Open Ralph Wiggum?
 
-Open Ralph Wiggum implements the **Ralph Wiggum technique** — an autonomous agentic loop where an AI coding agent (Claude Code, Codex, or OpenCode) receives the **same prompt repeatedly** until it completes a task. Each iteration, the AI sees its previous work in files and git history, enabling self-correction and incremental progress.
-
-This is a **CLI tool** that wraps any supported AI coding agent in a persistent development loop. No plugins required — just install and run.
+Open Ralph Wiggum implements the **Ralph Wiggum technique** — an autonomous agentic loop where an AI coding agent receives the **same prompt repeatedly** until it completes a task. Each iteration, the agent sees its previous work in files and git history, enabling self-correction and incremental progress.
 
 ```bash
 # The essence of the Ralph loop:
 while true; do
-  claude-code "Build feature X. Output <promise>DONE</promise> when complete."  # or codex, opencode
+  claude-code "Build feature X. Output <promise>DONE</promise> when complete."
 done
 ```
 
-**Why this works:** The AI doesn't talk to itself between iterations. It sees the same prompt each time, but the codebase has changed from previous iterations. This creates a powerful feedback loop where the agent iteratively improves its work until all tests pass.
+**Why this works:** The AI doesn't talk to itself between iterations. It sees the same prompt each time, but the codebase has changed from previous work. This creates a feedback loop where the agent iteratively improves until the task is genuinely done.
 
-### Multi-Agent Flexibility
-
-Switch between AI coding agents without changing your workflow:
-
-- **Claude Code** (`--agent claude-code`) — Anthropic's powerful coding agent
-- **Codex** (`--agent codex`) — OpenAI's code-specialized model
-- **Copilot CLI** (`--agent copilot`) — GitHub's agentic coding tool
-- **OpenCode** (`--agent opencode`) — Open-source default option
+---
 
 ## Key Features
 
-- **Multi-Agent Support** — Use Claude Code, Codex, or OpenCode with the same workflow
+- **Multi-Agent Support** — Use Claude Code, Codex, Copilot CLI, Aider, or OpenCode with the same workflow
 - **Self-Correcting Loops** — Agent sees its previous work and fixes its own mistakes
-- **Autonomous Execution** — Set it running and come back to finished code
-- **Task Tracking** — Built-in task management with `--tasks` mode
-- **Live Monitoring** — Check progress with `--status` from another terminal
-- **Mid-Loop Hints** — Inject guidance with `--add-context` without stopping
+- **Git Self-Diagnosis** — Automatically scans recent commits for `TODO`, `FIXME`, `ERROR`, `FAIL`, `BUG`, `BROKEN`, `HACK` keywords and injects a warning section into every prompt
+- **Web Dashboard** — `ralph dashboard` starts a local web UI to monitor the loop, view planning files, read logs, and inject context without stopping the loop
+- **Plan Mode** — `--plan` keeps `IMPLEMENTATION_PLAN.md` and `activity.md` in sync across iterations
+- **Task Tracking** — `--tasks` mode breaks complex projects into a managed checklist
+- **Presets** — `--preset NAME` loads saved prompt/config combos from `presets.json`
+- **Local Model Support** — `--base-url` connects to any OpenAI-compatible API (Ollama, LM Studio, etc.)
+- **Agent Rotation** — `--rotation` cycles through different agent/model pairs each iteration
+- **Mid-Loop Hints** — Inject guidance with `--add-context` or via the dashboard without stopping the loop
+- **Live Monitoring** — Check progress with `--status` or the web dashboard from another terminal
 
-## Why Use an Agentic Loop?
-
-| Benefit | How it works |
-|---------|--------------|
-| **Self-Correction** | AI sees test failures from previous runs, fixes them |
-| **Persistence** | Walk away, come back to completed work |
-| **Iteration** | Complex tasks broken into incremental progress |
-| **Automation** | No babysitting—loop handles retries |
-| **Observability** | Monitor progress with `--status`, see history and struggle indicators |
-| **Mid-Loop Guidance** | Inject hints with `--add-context` without stopping the loop |
+---
 
 ## Installation
 
 **Prerequisites:**
 - [Bun](https://bun.sh) runtime
-- At least one AI coding agent CLI:
-  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — Anthropic's Claude Code CLI
-  - [Codex](https://github.com/openai/codex) — OpenAI's Codex CLI
-  - [Copilot CLI](https://github.com/github/copilot-cli) — GitHub's Copilot CLI
-  - [OpenCode](https://opencode.ai) — Open-source AI coding assistant
+- At least one AI coding agent CLI installed and authenticated
 
 ### npm (recommended)
 
@@ -135,143 +114,331 @@ bun add -g @th0rgal/ralph-wiggum
 ```bash
 git clone https://github.com/Th0rgal/open-ralph-wiggum
 cd open-ralph-wiggum
-./install.sh
+./install.sh        # Linux / macOS
+.\install.ps1       # Windows (PowerShell)
 ```
 
-```powershell
-git clone https://github.com/Th0rgal/open-ralph-wiggum
-cd open-ralph-wiggum
-.\install.ps1
+### Uninstall
+
+```bash
+npm uninstall -g @th0rgal/ralph-wiggum
+# or from the repo:
+./uninstall.sh      # Linux / macOS
+.\uninstall.ps1     # Windows
 ```
 
-This installs the `ralph` CLI command globally.
+---
 
 ## Quick Start
 
 ```bash
-# Simple task with iteration limit
-ralph "Create a hello.txt file with 'Hello World'. Output <promise>DONE</promise> when complete." \
-  --max-iterations 5
+# Simple task
+ralph "Create a hello.txt with 'Hello World'." --max-iterations 5
 
 # Build something real
 ralph "Build a REST API for todos with CRUD operations and tests. \
   Run tests after each change. Output <promise>COMPLETE</promise> when all tests pass." \
   --max-iterations 20
 
-# Use Claude Code instead of OpenCode
-ralph "Create a small CLI and document usage. Output <promise>COMPLETE</promise> when done." \
-  --agent claude-code --model claude-sonnet-4 --max-iterations 5
+# Use Claude Code
+ralph "Refactor auth module and ensure tests pass" \
+  --agent claude-code --model claude-sonnet-4 --max-iterations 15
 
-# Use Codex instead of OpenCode
-ralph "Create a small CLI and document usage. Output <promise>COMPLETE</promise> when done." \
-  --agent codex --model gpt-5-codex --max-iterations 5
+# Use a local model via Ollama
+ralph "Fix the failing tests" \
+  --agent aider --model ollama/qwen2.5-coder \
+  --base-url http://localhost:11434/v1
 
-# Use Copilot CLI
-ralph "Create a small CLI and document usage. Output <promise>COMPLETE</promise> when done." \
-  --agent copilot --max-iterations 5
+# Complex project with plan tracking
+ralph "Build a full-stack web app with user auth and database" \
+  --plan --max-iterations 50
 
-# Complex project with Tasks Mode
-ralph "Build a full-stack web application with user auth and database" \
-  --tasks --max-iterations 50
+# Load a saved preset
+ralph --preset my_api_task
+
+# Monitor the loop in your browser
+ralph dashboard --open
 ```
 
-## Environment Variables
+---
 
-Configure agent binaries with these environment variables:
+## Commands & Options
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RALPH_OPENCODE_BINARY` | Path to OpenCode CLI | `"opencode"` |
-| `RALPH_CLAUDE_BINARY` | Path to Claude Code CLI | `"claude"` |
-| `RALPH_CODEX_BINARY` | Path to Codex CLI | `"codex"` |
-| `RALPH_COPILOT_BINARY` | Path to Copilot CLI | `"copilot"` |
-
-**Note for Windows users:** Ralph automatically resolves `.cmd` extensions for npm-installed CLIs. If you encounter "command not found" errors, you can use these environment variables to specify the full path to the executable.
-
-## Commands
-
-### Running a Loop
-
-```bash
+```
 ralph "<prompt>" [options]
-
-Options:
-  --agent AGENT            AI agent to use: opencode (default), claude-code, codex, copilot
-  --min-iterations N       Minimum iterations before completion allowed (default: 1)
-  --max-iterations N       Stop after N iterations (default: unlimited)
-  --completion-promise T   Text that signals completion (default: COMPLETE)
-  --abort-promise TEXT     Phrase that signals early abort (e.g., precondition failed)
-  --tasks, -t              Enable Tasks Mode for structured task tracking
-  --task-promise T         Text that signals task completion (default: READY_FOR_NEXT_TASK)
-  --model MODEL            Model to use (agent-specific)
-  --rotation LIST          Agent/model rotation for each iteration (comma-separated)
-  --prompt-file, --file, -f  Read prompt content from a file
-  --prompt-template PATH   Use custom prompt template (see Custom Prompts)
-  --no-stream              Buffer agent output and print at the end
-  --verbose-tools          Print every tool line (disable compact tool summary)
-  --no-plugins             Disable non-auth OpenCode plugins for this run (opencode only)
-  --no-commit              Don't auto-commit after iterations
-  --allow-all              Auto-approve all tool permissions (default: on)
-  --no-allow-all           Require interactive permission prompts
-  --help                   Show help
+ralph --prompt-file <path> [options]
+ralph dashboard [--port N] [--open]
 ```
 
-### Tasks Mode
+### Core Options
 
-Tasks Mode allows you to break complex projects into smaller, manageable tasks. Ralph works on one task at a time and tracks progress in a markdown file.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--agent AGENT` | `opencode` | Agent: `opencode`, `claude-code`, `codex`, `copilot`, `aider` |
+| `--model MODEL` | agent default | Model name (e.g. `anthropic/claude-sonnet-4`) |
+| `--min-iterations N` | `1` | Minimum iterations before completion is accepted |
+| `--max-iterations N` | unlimited | Stop after N iterations |
+| `--completion-promise TEXT` | `COMPLETE` | Text that signals task completion |
+| `--abort-promise TEXT` | — | Text that signals early abort (precondition failed) |
+
+### Prompt Sources
+
+| Option | Description |
+|--------|-------------|
+| `--prompt-file, --file, -f PATH` | Read prompt from a file |
+| `--prompt-template PATH` | Use a custom prompt template with `{{variables}}` |
+| `--preset NAME` | Load a saved prompt/config combo from `presets.json` |
+| `--init-presets` | Write a starter `presets.json` to `.ralph/presets.json` |
+
+### Modes
+
+| Option | Description |
+|--------|-------------|
+| `--tasks, -t` | Tasks Mode — work through a checklist in `.ralph/ralph-tasks.md` |
+| `--task-promise TEXT` | Signal for one task done (default: `READY_FOR_NEXT_TASK`) |
+| `--plan` | Plan Mode — agent maintains `IMPLEMENTATION_PLAN.md` + `activity.md` |
+
+### Multi-Agent Rotation
 
 ```bash
-# Enable Tasks Mode
+# Cycle between agents/models across iterations
+ralph "Build feature" \
+  --rotation "opencode:claude-sonnet-4,claude-code:claude-sonnet-4" \
+  --max-iterations 10
+```
+
+Each entry must be `agent:model`. When `--rotation` is used, `--agent` and `--model` are ignored.
+
+### Local / OpenAI-compatible Models
+
+```bash
+ralph "Fix tests" \
+  --agent aider \
+  --model ollama/qwen2.5-coder \
+  --base-url http://localhost:11434/v1
+```
+
+The `--base-url` flag works with any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.).
+
+### Output & Permissions
+
+| Option | Description |
+|--------|-------------|
+| `--no-stream` | Buffer output and print at end instead of streaming |
+| `--verbose-tools` | Print every tool call (disables compact tool summary) |
+| `--questions` | Enable interactive question handling (default: on) |
+| `--no-questions` | Disable interactive question handling |
+| `--no-plugins` | Disable non-auth OpenCode plugins (opencode only) |
+| `--no-commit` | Skip auto-commit after each iteration |
+| `--allow-all` | Auto-approve all tool permissions (default: on) |
+| `--no-allow-all` | Require interactive permission prompts |
+
+### Status & Control Commands
+
+```bash
+ralph --status                          # Active loop state + history
+ralph --status --tasks                  # Include current task list
+ralph --add-context "Focus on auth.ts"  # Inject hint into next iteration
+ralph --clear-context                   # Clear pending context note
+ralph --list-tasks                      # Show task list with indices
+ralph --add-task "Implement login page"  # Add a task
+ralph --remove-task 3                   # Remove task at index 3
+```
+
+### Config Commands
+
+```bash
+ralph --init-config              # Write default agent config to ~/.config/open-ralph-wiggum/agents.json
+ralph --init-config ./my.json    # Write to custom path
+ralph --config ./my.json         # Use custom agent config for this run
+ralph --init-presets             # Write starter presets.json to .ralph/presets.json
+ralph --version                  # Show version
+ralph --help                     # Show help
+```
+
+### Passing Flags to the Agent
+
+```bash
+# Everything after -- is forwarded to the underlying agent process
+ralph "Build API" -- --extra-agent-flag value
+```
+
+---
+
+## Web Dashboard
+
+`ralph dashboard` starts a local Bun HTTP server for monitoring and intervention:
+
+```bash
+ralph dashboard               # Start on http://localhost:5000
+ralph dashboard --port 8080   # Custom port
+ralph dashboard --open        # Start and open in browser automatically
+```
+
+Run the dashboard in one terminal while the loop runs in another:
+
+```bash
+# Terminal 1 — run the loop
+ralph "Build a REST API" --plan --max-iterations 30
+
+# Terminal 2 — watch it live
+ralph dashboard --open
+```
+
+### Dashboard Pages
+
+| Route | Description |
+|-------|-------------|
+| `/status` | Active loop state, iteration count, elapsed time, recent history |
+| `/plan` | Live view of `IMPLEMENTATION_PLAN.md` |
+| `/activity` | Last 100 lines of `activity.md` |
+| `/logs` | Detailed last 10 iterations: tools used, files modified, errors |
+| `/intervene` | Form to inject a context note into the next iteration's prompt |
+| `/readme` | This documentation — how ralph works, all commands & examples |
+
+The `/readme` page always reads the installed `README.md` directly from the ralph package, so it stays in sync with whatever version is installed.
+
+---
+
+## Plan Mode
+
+`--plan` keeps the agent accountable across iterations via two files it maintains itself.
+
+```bash
+ralph "Build a full-stack app with auth and dashboard" --plan --max-iterations 50
+```
+
+**On the first iteration**, if neither file exists, the agent is instructed to create:
+- `IMPLEMENTATION_PLAN.md` — structured plan with tasks, subtasks, and status markers
+- `activity.md` — running log of what was done each iteration
+
+**On every subsequent iteration**, ralph reads both files and injects them into the prompt. The agent is reminded to update task statuses and append a new activity log entry before and after making changes.
+
+**In the dashboard:**
+- `/plan` renders `IMPLEMENTATION_PLAN.md` with live markdown formatting
+- `/activity` shows the last 100 lines of `activity.md`
+
+---
+
+## Git Self-Diagnosis
+
+Always active — no flag needed.
+
+Before each iteration, ralph runs `git log --oneline -10` and scans for commits containing:
+
+```
+TODO  FIXME  ERROR  FAIL  BROKEN  BUG  HACK
+```
+
+If any matching commits are found, a **"Recent Git Issues"** section is injected into the prompt, telling the agent to address those issues before advancing. This catches stale TODOs, failed test commits, and debugging hacks automatically.
+
+---
+
+## Tasks Mode
+
+Tasks Mode breaks complex projects into a managed checklist.
+
+```bash
 ralph "Build a complete web application" --tasks --max-iterations 20
 
 # Custom task completion signal
 ralph "Multi-feature project" --tasks --task-promise "TASK_DONE"
 ```
 
-#### Task Management Commands
+#### Task Management
 
 ```bash
-# List current tasks
-ralph --list-tasks
-
-# Add a new task
-ralph --add-task "Implement user authentication"
-
-# Remove task by index
-ralph --remove-task 3
-
-# Show status (tasks shown automatically when tasks mode is active)
-ralph --status
+ralph --list-tasks                         # Show current tasks
+ralph --add-task "Implement user auth"     # Add a task
+ralph --remove-task 3                      # Remove task at index 3
+ralph --status                             # Status shows tasks automatically in tasks mode
 ```
 
-#### How Tasks Mode Works
+#### Task File Format (`.ralph/ralph-tasks.md`)
 
-1. **Task File**: Tasks are stored in `.ralph/ralph-tasks.md`
-2. **One Task Per Iteration**: Ralph focuses on a single task to reduce confusion
-3. **Automatic Progression**: When a task completes (`<promise>READY_FOR_NEXT_TASK</promise>`), Ralph moves to the next
-4. **Persistent State**: Tasks survive loop restarts
-5. **Focused Context**: Smaller contexts per iteration reduce costs and improve reliability
-
-Task status indicators:
-- `[ ]` - Not started
-- `[/]` - In progress
-- `[x]` - Complete
-
-Example task file:
 ```markdown
 # Ralph Tasks
 
-- [ ] Set up project structure
-- [x] Initialize git repository
+- [x] Set up project structure
+- [ ] Initialize database schema
 - [/] Implement user authentication
   - [ ] Create login page
   - [ ] Add JWT handling
 - [ ] Build dashboard UI
 ```
 
-### Custom Prompt Templates
+Status markers:
+- `[ ]` — not started
+- `[/]` — in progress
+- `[x]` — complete
 
-You can fully customize the prompt sent to the agent using `--prompt-template`. This is useful for integrating with custom workflows or tools.
+---
+
+## Presets
+
+Presets save frequently used prompt/config combos so you don't repeat long flags.
+
+#### Create a presets file
+
+```bash
+ralph --init-presets
+```
+
+This writes a starter `.ralph/presets.json`. Edit it:
+
+```json
+{
+  "version": "1.0",
+  "defaults": {
+    "agent": "claude-code",
+    "maxIterations": 30
+  },
+  "presets": {
+    "crud_api": {
+      "prompt": "Build a FastAPI CRUD app for users with PostgreSQL. Run tests. Output <promise>COMPLETE</promise> when all tests pass.",
+      "model": "claude-sonnet-4",
+      "maxIterations": 25,
+      "completionPromise": "COMPLETE"
+    },
+    "fix_tests": {
+      "prompt": "Find and fix all failing tests. Do not change test definitions, only fix the implementation. Output <promise>COMPLETE</promise> when all tests pass.",
+      "maxIterations": 15,
+      "planMode": true
+    }
+  }
+}
+```
+
+#### Use a preset
+
+```bash
+ralph --preset crud_api
+ralph --preset fix_tests
+
+# CLI flags always override preset values:
+ralph --preset crud_api --max-iterations 5 --agent opencode
+```
+
+Presets are loaded from `.ralph/presets.json` first, then `~/.config/open-ralph-wiggum/presets.json`.
+
+#### Preset fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `prompt` | string | Task prompt |
+| `agent` | string | Agent name |
+| `model` | string | Model name |
+| `baseUrl` | string | OpenAI-compatible API base URL |
+| `maxIterations` | number | Max iterations |
+| `minIterations` | number | Min iterations |
+| `completionPromise` | string | Completion signal text |
+| `planMode` | boolean | Enable plan mode |
+
+---
+
+## Custom Prompt Templates
+
+Fully customize the prompt sent to the agent with `--prompt-template`:
 
 ```bash
 ralph "Build a REST API" --prompt-template ./my-template.md
@@ -282,130 +449,33 @@ ralph "Build a REST API" --prompt-template ./my-template.md
 | Variable | Description |
 |----------|-------------|
 | `{{iteration}}` | Current iteration number |
-| `{{max_iterations}}` | Maximum iterations (or "unlimited") |
-| `{{min_iterations}}` | Minimum iterations |
+| `{{max_iterations}}` | Max iterations (or "unlimited") |
+| `{{min_iterations}}` | Min iterations |
 | `{{prompt}}` | The user's task prompt |
-| `{{completion_promise}}` | Completion promise text (e.g., "COMPLETE") |
-| `{{abort_promise}}` | Abort promise text (if configured) |
+| `{{completion_promise}}` | Completion promise text |
+| `{{abort_promise}}` | Abort promise text (if set) |
 | `{{task_promise}}` | Task promise text (for tasks mode) |
 | `{{context}}` | Additional context added mid-loop |
 | `{{tasks}}` | Task list content (for tasks mode) |
 
-**Example template (`my-template.md`):**
+---
 
-```markdown
-# Iteration {{iteration}} / {{max_iterations}}
-
-## Task
-{{prompt}}
-
-## Instructions
-1. Check beads for current status
-2. Decide what to do next
-3. When the epic in beads is complete, output:
-   <promise>{{completion_promise}}</promise>
-
-{{context}}
-```
-
-### Monitoring & Control
-
-```bash
-# Check status of active loop (run from another terminal)
-ralph --status
-
-# Add context/hints for the next iteration
-ralph --add-context "Focus on fixing the auth module first"
-
-# Clear pending context
-ralph --clear-context
-```
-
-### Status Dashboard
-
-The `--status` command shows:
-- **Active loop info**: Current iteration, elapsed time, prompt
-- **Pending context**: Any hints queued for next iteration
-- **Current tasks**: Automatically shown when tasks mode is active (or use `--tasks`)
-- **Iteration history**: Last 5 iterations with tools used, duration
-- **Struggle indicators**: Warnings if agent is stuck (no progress, repeated errors)
-
-```
-╔══════════════════════════════════════════════════════════════════╗
-║                    Ralph Wiggum Status                           ║
-╚══════════════════════════════════════════════════════════════════╝
-
-🔄 ACTIVE LOOP
-   Iteration:    3 / 10
-   Elapsed:      5m 23s
-   Promise:      COMPLETE
-   Prompt:       Build a REST API...
-
-📊 HISTORY (3 iterations)
-   Total time:   5m 23s
-
-   Recent iterations:
-   🔄 #1: 2m 10s | Bash:5 Write:3 Read:2
-   🔄 #2: 1m 45s | Edit:4 Bash:3 Read:2
-   🔄 #3: 1m 28s | Bash:2 Edit:1
-
-⚠️  STRUGGLE INDICATORS:
-   - No file changes in 3 iterations
-   💡 Consider using: ralph --add-context "your hint here"
-```
-
-### Mid-Loop Context Injection
+## Mid-Loop Context Injection
 
 Guide a struggling agent without stopping the loop:
 
 ```bash
-# In another terminal while loop is running
+# In another terminal while the loop is running:
 ralph --add-context "The bug is in utils/parser.ts line 42"
 ralph --add-context "Try using the singleton pattern for config"
+
+# Or use the dashboard /intervene page
+ralph dashboard --open
 ```
 
 Context is automatically consumed after one iteration.
 
-## Troubleshooting
-
-### Plugin errors
-
-This package is **CLI-only**. If OpenCode tries to load a `ralph-wiggum` or `open-ralph-wiggum` plugin,
-remove it from your OpenCode `plugin` list (opencode.json), or run:
-
-```bash
-ralph "Your task" --no-plugins
-```
-
-### ProviderModelNotFoundError / Model not configured
-
-If you see `ProviderModelNotFoundError` or "Provider returned error", you need to configure a default model:
-
-**For OpenCode:**
-1. Edit `~/.config/opencode/opencode.json`:
-   ```json
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "model": "your-provider/model-name"
-   }
-   ```
-2. Or use the `--model` flag: `ralph "task" --model provider/model`
-
-**For other agents:**
-Use the `--model` flag to specify the model explicitly.
-
-### "command not found" on Windows
-
-Ralph automatically tries `.cmd` extensions on Windows. If you still have issues:
-1. Set the full path using environment variables:
-   ```powershell
-   $env:RALPH_OPENCODE_BINARY = "C:\path\to\opencode.cmd"
-   ```
-2. Or add the CLI to your PATH
-
-### "bun: command not found"
-
-Install Bun: https://bun.sh
+---
 
 ## Writing Good Prompts
 
@@ -428,10 +498,7 @@ Run tests after changes. Output <promise>COMPLETE</promise> when all tests pass.
 
 ### Use Verifiable Conditions
 
-❌ Bad:
-```
-Make the code better
-```
+❌ Bad: `Make the code better`
 
 ✅ Good:
 ```
@@ -446,107 +513,198 @@ Output <promise>DONE</promise> when refactored and tests pass.
 ### Always Set Max Iterations
 
 ```bash
-# Safety net for runaway loops
-ralph "Your task" --max-iterations 20
+ralph "Your task" --max-iterations 20   # Safety net for runaway loops
 ```
 
-## Recommended PRD Format
+### Use a PRD File for Complex Tasks
 
-Ralph treats prompt files as plain text, so any format works. For best results, use a concise PRD with:
+```bash
+ralph --prompt-file ./prd.md --max-iterations 30 --plan
+```
 
-- **Goal**: one sentence summary of the desired outcome
-- **Scope**: what is in/out
-- **Requirements**: numbered, testable items
-- **Constraints**: tech stack, performance, security, compatibility
-- **Acceptance criteria**: explicit success checks
-- **Completion promise**: include `<promise>COMPLETE</promise>` (or match your `--completion-promise`)
-
-Example (Markdown):
+Example `prd.md`:
 
 ```markdown
-# PRD: Add Export Button
-
 ## Goal
-Let users export reports as CSV from the dashboard.
-
-## Scope
-- In: export current report view
-- Out: background exports, scheduling
+Add CSV export to the dashboard.
 
 ## Requirements
-1. Add "Export CSV" button to dashboard header.
-2. CSV includes columns: date, revenue, sessions.
-3. Works for reports up to 10k rows.
-
-## Constraints
-- Keep current UI styling.
-- Use existing CSV utility in utils/csv.ts.
+1. "Export CSV" button in dashboard header
+2. CSV includes: date, revenue, sessions columns
+3. Works for reports up to 10k rows
 
 ## Acceptance Criteria
-- Clicking button downloads a valid CSV.
-- CSV opens cleanly in Excel/Sheets.
-- All existing tests pass.
+- Clicking button downloads a valid CSV
+- CSV opens cleanly in Excel/Sheets
+- All existing tests pass
 
-## Completion Promise
 <promise>COMPLETE</promise>
 ```
 
-### JSON Feature List (Recommended for Complex Projects)
+---
 
-For larger projects, a structured JSON feature list works better than prose. Based on [Anthropic's research on effective agent harnesses](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents), JSON format reduces the chance of agents inappropriately modifying test definitions.
+## Agent Rotation
 
-Create a `features.json` file:
+Cycle through different agent/model pairs across iterations:
+
+```bash
+# Alternate between two agents
+ralph "Build a REST API" \
+  --rotation "opencode:claude-sonnet-4,claude-code:claude-sonnet-4" \
+  --max-iterations 10
+
+# Three-way rotation
+ralph "Refactor the auth module" \
+  --rotation "opencode:claude-sonnet-4,claude-code:claude-sonnet-4,codex:gpt-5-codex" \
+  --max-iterations 15
+```
+
+Rotation cycles back to entry 1 after the last entry. The `--status` command shows which entry is currently active.
+
+---
+
+## Monitoring & Status
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║                    Ralph Wiggum Status                           ║
+╚══════════════════════════════════════════════════════════════════╝
+
+🔄 ACTIVE LOOP
+   Iteration:    3 / 20
+   Elapsed:      5m 23s
+   Promise:      COMPLETE
+   Plan Mode:    ENABLED
+   Prompt:       Build a REST API...
+
+📊 HISTORY (3 iterations)
+   Total time:   5m 23s
+
+   Recent iterations:
+   #1  2m 10s  claude-code / claude-sonnet-4  Bash(5) Write(3) Read(2)
+   #2  1m 45s  claude-code / claude-sonnet-4  Edit(4) Bash(3) Read(2)
+   #3  1m 28s  claude-code / claude-sonnet-4  Bash(2) Edit(1)
+
+⚠️  STRUGGLE INDICATORS:
+   - No file changes in 3 iterations
+   💡 Consider: ralph --add-context "your hint here"
+```
+
+---
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│   ┌──────────┐    prompt + context    ┌──────────┐             │
+│   │          │ ─────────────────────▶ │          │             │
+│   │  ralph   │                        │ AI Agent │             │
+│   │   CLI    │ ◀───────────────────── │          │             │
+│   │          │   output + file edits  │          │             │
+│   └──────────┘                        └──────────┘             │
+│        │                                   │                   │
+│        │ scan git log                       │ modify            │
+│        │ check promise                      │ files             │
+│        ▼                                   ▼                   │
+│   ┌──────────┐                        ┌──────────┐             │
+│   │ Complete │                        │   Git    │             │
+│   │   or     │                        │  Repo    │             │
+│   │  Retry   │                        │ (state)  │             │
+│   └──────────┘                        └──────────┘             │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+1. Ralph sends your prompt (plus context, plan files, git issues) to the agent
+2. The agent works on the task and modifies files
+3. Ralph scans recent git commits for issue keywords
+4. Ralph checks the output for the completion promise
+5. If not found, repeat with the same prompt (agent sees its previous work in files)
+6. Loop until the promise is detected or max iterations is reached
+
+---
+
+## Project Structure
+
+```
+ralph-wiggum/
+├── bin/ralph.js          # CLI entrypoint (npm wrapper)
+├── ralph.ts              # Main loop implementation (~2500 lines)
+├── dashboard.ts          # Web dashboard (Bun HTTP server)
+├── completion.ts         # Completion detection helpers
+├── package.json
+├── install.sh / install.ps1
+└── uninstall.sh / uninstall.ps1
+```
+
+### State Files (in `.ralph/`)
+
+| File | Description |
+|------|-------------|
+| `ralph-loop.state.json` | Active loop state (agent, iteration, prompt, flags) |
+| `ralph-history.json` | Iteration history and metrics |
+| `ralph-context.md` | Pending context note for next iteration |
+| `ralph-tasks.md` | Task checklist (created by `--tasks` mode) |
+| `presets.json` | Saved prompt/config presets |
+
+### Plan Mode Files (in project root)
+
+| File | Description |
+|------|-------------|
+| `IMPLEMENTATION_PLAN.md` | Structured plan maintained by the agent |
+| `activity.md` | Running log of what happened each iteration |
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RALPH_OPENCODE_BINARY` | `opencode` | Path to OpenCode CLI |
+| `RALPH_CLAUDE_BINARY` | `claude` | Path to Claude Code CLI |
+| `RALPH_CODEX_BINARY` | `codex` | Path to Codex CLI |
+| `RALPH_COPILOT_BINARY` | `copilot` | Path to Copilot CLI |
+| `RALPH_AIDER_BINARY` | `aider` | Path to Aider CLI |
+
+**Windows note:** Ralph automatically tries `.cmd` extensions for npm-installed CLIs. If you get "command not found" errors, set the full path via these variables.
+
+---
+
+## Troubleshooting
+
+### Plugin errors
+
+This package is **CLI-only**. If OpenCode tries to load a `ralph-wiggum` plugin, remove it from your `opencode.json`, or run:
+
+```bash
+ralph "Your task" --no-plugins
+```
+
+### ProviderModelNotFoundError
+
+Configure a default model in `~/.config/opencode/opencode.json`:
 
 ```json
 {
-  "features": [
-    {
-      "category": "functional",
-      "description": "Export button downloads CSV with current report data",
-      "steps": [
-        "Navigate to dashboard",
-        "Click 'Export CSV' button",
-        "Verify CSV file downloads",
-        "Open CSV and verify columns: date, revenue, sessions",
-        "Verify data matches displayed report"
-      ],
-      "passes": false
-    },
-    {
-      "category": "functional",
-      "description": "Export handles large reports up to 10k rows",
-      "steps": [
-        "Load report with 10,000 rows",
-        "Click 'Export CSV' button",
-        "Verify export completes without timeout",
-        "Verify all rows present in CSV"
-      ],
-      "passes": false
-    },
-    {
-      "category": "ui",
-      "description": "Export button matches existing dashboard styling",
-      "steps": [
-        "Navigate to dashboard",
-        "Verify button uses existing button component",
-        "Verify button placement in header area"
-      ],
-      "passes": false
-    }
-  ]
+  "$schema": "https://opencode.ai/config.json",
+  "model": "your-provider/model-name"
 }
 ```
 
-Then reference it in your prompt:
+Or use `--model` explicitly: `ralph "task" --model provider/model`
 
-```
-Read features.json for the feature list. Work through each feature one at a time.
-After verifying a feature works end-to-end, update its "passes" field to true.
-Do NOT modify the description or steps - only change the passes boolean.
-Output <promise>COMPLETE</promise> when all features pass.
+### "command not found" on Windows
+
+```powershell
+$env:RALPH_CLAUDE_BINARY = "C:\path\to\claude.cmd"
 ```
 
-**Why JSON?** Agents are less likely to inappropriately modify JSON test definitions compared to Markdown. The structured format keeps agents focused on implementation rather than redefining success criteria.
+### "bun: command not found"
+
+Install Bun: https://bun.sh
+
+---
 
 ## When to Use Ralph
 
@@ -554,237 +712,22 @@ Output <promise>COMPLETE</promise> when all features pass.
 - Tasks with automatic verification (tests, linters, type checking)
 - Well-defined tasks with clear completion criteria
 - Greenfield projects where you can walk away
-- Iterative refinement (getting tests to pass)
+- Iterative refinement (getting a test suite to pass)
+- Long-running projects tracked with `--plan` or `--tasks`
 
 **Not good for:**
-- Tasks requiring human judgment
-- One-shot operations
+- Tasks requiring human judgment at each step
+- One-shot operations (just use the agent directly)
 - Unclear success criteria
-- Production debugging
+- Production debugging with no tests
 
-## How It Works
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│   ┌──────────┐    same prompt    ┌──────────┐              │
-│   │          │ ───────────────▶  │          │              │
-│   │  ralph   │                   │ AI Agent │              │
-│   │   CLI    │ ◀─────────────── │          │              │
-│   │          │   output + files  │          │              │
-│   └──────────┘                   └──────────┘              │
-│        │                              │                     │
-│        │ check for                    │ modify              │
-│        │ <promise>                    │ files               │
-│        ▼                              ▼                     │
-│   ┌──────────┐                   ┌──────────┐              │
-│   │ Complete │                   │   Git    │              │
-│   │   or     │                   │  Repo    │              │
-│   │  Retry   │                   │ (state)  │              │
-│   └──────────┘                   └──────────┘              │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-1. Ralph sends your prompt to the selected agent
-2. The agent works on the task, modifies files
-3. Ralph checks output for completion promise
-4. If not found, repeat with same prompt
-5. AI sees previous work in files
-6. Loop until success or max iterations
-
-## Project Structure
-
-```
-ralph-wiggum/
-├── bin/ralph.js                  # CLI entrypoint (npm wrapper)
-├── ralph.ts                      # Main loop implementation
-├── package.json                  # Package config
-├── install.sh / install.ps1     # Installation scripts
-└── uninstall.sh / uninstall.ps1 # Uninstallation scripts
-```
-
-### State Files (in .ralph/)
-
-During operation, Ralph stores state in `.ralph/`:
-- `ralph-loop.state.json` - Active loop state
-- `ralph-history.json` - Iteration history and metrics
-- `ralph-context.md` - Pending context for next iteration
-- `ralph-tasks.md` - Task list for Tasks Mode (created when `--tasks` is used)
-
-## Uninstall
-
-```bash
-npm uninstall -g @th0rgal/ralph-wiggum
-```
-
-```powershell
-npm uninstall -g @th0rgal/ralph-wiggum
-```
-
-## Agent-Specific Notes
-
-### Claude Code
-
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) is Anthropic's official CLI for Claude. Use it with Open Ralph Wiggum for powerful autonomous coding:
-
-```bash
-ralph "Refactor the auth module and ensure tests pass" \
-  --agent claude-code \
-  --model claude-sonnet-4 \
-  --max-iterations 15
-```
-
-### OpenAI Codex
-
-[Codex](https://github.com/openai/codex) is OpenAI's code-specialized agent. Perfect for code generation and refactoring tasks:
-
-```bash
-ralph "Generate unit tests for all utility functions" \
-  --agent codex \
-  --model gpt-5-codex \
-  --max-iterations 10
-```
-
-### OpenCode
-
-[OpenCode](https://opencode.ai) is an open-source AI coding assistant. It's the default agent:
-
-```bash
-ralph "Fix all TypeScript errors" --max-iterations 10
-```
-
-### Copilot CLI
-
-[Copilot CLI](https://github.com/github/copilot-cli) is GitHub's agentic coding tool (public preview). It requires a GitHub Copilot subscription and authentication via `GH_TOKEN`, `GITHUB_TOKEN`, or prior `copilot /login`.
-
-**Install:**
-```bash
-npm install -g @github/copilot
-# or
-brew install copilot-cli
-```
-
-**Usage:**
-```bash
-ralph "Refactor the auth module and add tests" \
-  --agent copilot \
-  --max-iterations 15
-
-# With a specific model
-ralph "Build a REST API" \
-  --agent copilot \
-  --model claude-opus-4.6 \
-  --max-iterations 10
-```
-
-**Notes:**
-- Default model is Claude Sonnet 4.5; override with `--model`
-- `--allow-all` (default) maps to `--allow-all` + `--no-ask-user` in Copilot CLI
-- `--no-plugins` has no effect with Copilot CLI
-- Authentication: set `GH_TOKEN` / `GITHUB_TOKEN` env var, or run `copilot /login` first
-
-## Agent Rotation
-
-Agent rotation lets you cycle through different agent/model combinations across iterations. This is useful for leveraging the strengths of different models or comparing their performance on a task.
-
-### Format
-
-Each rotation entry uses the `agent:model` format:
-
-```
---rotation "agent1:model1,agent2:model2,agent3:model3"
-```
-
-**Valid agents:** `opencode`, `claude-code`, `codex`, `copilot`
-
-### Example Usage
-
-```bash
-# Alternate between OpenCode and Claude Code
-ralph "Build a REST API" \
-  --rotation "opencode:claude-sonnet-4,claude-code:claude-sonnet-4" \
-  --max-iterations 10
-
-# Cycle through three different configurations
-ralph "Refactor the auth module" \
-  --rotation "opencode:claude-sonnet-4,claude-code:claude-sonnet-4,codex:gpt-5-codex" \
-  --max-iterations 15
-
-# Include Copilot in the rotation
-ralph "Build a REST API" \
-  --rotation "opencode:claude-sonnet-4,copilot:claude-sonnet-4" \
-  --max-iterations 10
-```
-
-### Flag Interaction
-
-When `--rotation` is used, the `--agent` and `--model` flags are **ignored**. The rotation list takes precedence for agent/model selection.
-
-### Cycling Behavior
-
-The rotation cycles back to the first entry after reaching the end:
-
-- Iteration 1 → Entry 1
-- Iteration 2 → Entry 2
-- Iteration 3 → Entry 1 (wraps around for a 2-entry rotation)
-- ...and so on
-
-### Error Messages
-
-Invalid rotation entries produce clear error messages:
-
-**Invalid agent name:**
-```
-Error: Invalid agent 'invalid' in rotation entry 'invalid:model'. Valid agents: opencode, claude-code, codex, copilot
-```
-
-**Malformed entry (missing colon):**
-```
-Error: Invalid rotation entry 'opencode-model'. Expected format: agent:model
-```
-
-**Empty values:**
-```
-Error: Invalid rotation entry 'opencode:'. Both agent and model are required.
-```
-
-### Status Display
-
-When using `--status` with an active rotation, the output shows all rotation entries and marks the current one:
-
-```
-🔄 ACTIVE LOOP
-   Iteration:    3 / 10
-   Prompt:       Build a REST API...
-
-   Rotation (position 1/2):
-   1. opencode:claude-sonnet-4  **ACTIVE**
-   2. claude-code:claude-sonnet-4
-```
-
-### Iteration History
-
-The `--status` command shows which agent and model was used for each iteration:
-
-```
-📊 HISTORY (3 iterations)
-   Total time:   5m 23s
-
-   Recent iterations:
-   #1  2m 10s  opencode / claude-sonnet-4  Bash(5) Write(3) Read(2)
-   #2  1m 45s  claude-code / claude-sonnet-4  Edit(4) Bash(3) Read(2)
-   #3  1m 28s  opencode / claude-sonnet-4  Bash(2) Edit(1)
-```
+---
 
 ## Learn More
 
 - [Original Ralph Wiggum technique by Geoffrey Huntley](https://ghuntley.com/ralph/)
 - [Ralph Orchestrator](https://github.com/mikeyobrien/ralph-orchestrator)
-
-## See Also
-
-Check out 🏝️ [sandboxed.sh](https://github.com/Th0rgal/sandboxed.sh) — a dashboard for orchestrating AI agents with workspace management, real-time monitoring, and multi-agent workflows.
+- [sandboxed.sh](https://github.com/Th0rgal/sandboxed.sh) — isolated Linux workspaces for AI agents
 
 ## License
 

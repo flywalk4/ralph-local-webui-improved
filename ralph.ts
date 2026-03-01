@@ -58,6 +58,23 @@ interface RalphConfig {
   agents: JsonAgentConfig[];
 }
 
+interface RalphPreset {
+  prompt?: string;
+  agent?: string;
+  model?: string;
+  baseUrl?: string;
+  maxIterations?: number;
+  minIterations?: number;
+  completionPromise?: string;
+  planMode?: boolean;
+}
+
+interface RalphPresetsConfig {
+  version: string;
+  defaults?: Partial<RalphPreset>;
+  presets: Record<string, RalphPreset>;
+}
+
 const DEFAULT_CONFIG_PATH = join(process.env.HOME || "", ".config", "open-ralph-wiggum", "agents.json");
 
 const PARSE_PATTERNS: Record<string, (line: string) => string | null> = {
@@ -184,6 +201,30 @@ function loadAgentConfig(configPath?: string): Record<string, JsonAgentConfig> |
   } catch {
     return null;
   }
+}
+
+const PRESETS_CONFIG_PATH = join(process.env.HOME || "", ".config", "open-ralph-wiggum", "presets.json");
+
+function loadPresets(configPath?: string): RalphPresetsConfig | null {
+  const projectPresetsPath = join(process.cwd(), ".ralph", "presets.json");
+  const paths = [projectPresetsPath, configPath || PRESETS_CONFIG_PATH];
+  for (const p of paths) {
+    if (existsSync(p)) {
+      try {
+        return JSON.parse(readFileSync(p, "utf-8")) as RalphPresetsConfig;
+      } catch {
+        // skip invalid file
+      }
+    }
+  }
+  return null;
+}
+
+function getPreset(name: string, config: RalphPresetsConfig): RalphPreset | null {
+  const preset = config.presets[name];
+  if (!preset) return null;
+  // Merge defaults under preset (preset values take priority)
+  return { ...(config.defaults ?? {}), ...preset };
 }
 
 function createAgentConfig(json: JsonAgentConfig): AgentConfig {
@@ -322,68 +363,92 @@ Ralph Wiggum Loop - Iterative AI development with AI agents
 Usage:
   ralph "<prompt>" [options]
   ralph --prompt-file <path> [options]
+  ralph dashboard [--port N] [--open]
 
 Arguments:
   prompt              Task description for the AI to work on
 
-Options:
+── Core Options ────────────────────────────────────────────────────────────────
   --agent AGENT       AI agent to use: opencode (default), claude-code, codex, copilot, aider
+  --model MODEL       Model to use (agent-specific, e.g., anthropic/claude-sonnet)
   --min-iterations N  Minimum iterations before completion allowed (default: 1)
   --max-iterations N  Maximum iterations before stopping (default: unlimited)
   --completion-promise TEXT  Phrase that signals completion (default: COMPLETE)
-  --abort-promise TEXT  Phrase that signals early abort (e.g., precondition failed)
-  --tasks, -t         Enable Tasks Mode for structured task tracking
-  --task-promise TEXT Phrase that signals task completion (default: READY_FOR_NEXT_TASK)
-  --model MODEL       Model to use (agent-specific, e.g., anthropic/claude-sonnet)
-  --base-url URL      Base URL for OpenAI-compatible APIs (e.g., http://localhost:11434/v1 for Ollama)
-  --rotation LIST     Agent/model rotation for each iteration (comma-separated)
+  --abort-promise TEXT       Phrase that signals early abort
+
+── Prompt Sources ───────────────────────────────────────────────────────────────
+  --prompt-file, --file, -f  Read prompt from a file
+  --prompt-template PATH     Use a custom prompt template (supports {{variables}})
+  --preset NAME              Load a saved prompt/config combo from .ralph/presets.json
+  --init-presets             Write a starter presets.json to .ralph/presets.json
+
+── Modes ────────────────────────────────────────────────────────────────────────
+  --tasks, -t         Tasks Mode — work through a checklist in .ralph/ralph-tasks.md
+  --task-promise TEXT Phrase that signals one task is done (default: READY_FOR_NEXT_TASK)
+  --plan              Plan Mode — agent maintains IMPLEMENTATION_PLAN.md + activity.md;
+                      both files are injected into every iteration's prompt
+
+── Multi-agent Rotation ─────────────────────────────────────────────────────────
+  --rotation LIST     Cycle through agent:model pairs each iteration (comma-separated)
                       Each entry must be "agent:model" format
-                      Valid agents: opencode, claude-code, codex, aider
                       Example: --rotation "opencode:claude-sonnet-4,claude-code:gpt-4o"
                       When used, --agent and --model are ignored
-  --prompt-file, --file, -f  Read prompt content from a file
-  --prompt-template PATH  Use custom prompt template (supports variables)
+
+── Local / OpenAI-compatible Models ─────────────────────────────────────────────
+  --base-url URL      Base URL for OpenAI-compatible APIs (e.g., http://localhost:11434/v1)
+                      Example: ralph "task" --agent aider --model ollama/qwen2.5-coder \\
+                                            --base-url http://localhost:11434/v1
+
+── Output & Permissions ─────────────────────────────────────────────────────────
   --no-stream         Buffer agent output and print at the end
-  --verbose-tools     Print every tool line (disable compact tool summary)
-  --questions         Enable interactive question handling (default: enabled)
-  --no-questions      Disable interactive question handling (agent will loop on questions)
-  --no-plugins        Disable non-auth OpenCode plugins for this run (opencode only)
+  --verbose-tools     Print every tool call (disable compact tool summary)
+  --questions         Enable interactive question handling (default: on)
+  --no-questions      Disable interactive question handling
+  --no-plugins        Disable non-auth OpenCode plugins (opencode only)
   --no-commit         Don't auto-commit after each iteration
   --allow-all         Auto-approve all tool permissions (default: on)
   --no-allow-all      Require interactive permission prompts
-  --config PATH       Use custom agent config file
-  --init-config [PATH]  Write default agent config to PATH
-  --version, -v       Show version
-  --help, -h          Show this help
-  --                  Pass all remaining arguments to the agent (e.g., -- --extra-tags)
 
-Commands:
-  --status            Show current Ralph loop status and history
+── Config ───────────────────────────────────────────────────────────────────────
+  --config PATH         Use a custom agent config file
+  --init-config [PATH]  Write default agent config to PATH
+  --version, -v         Show version
+  --help, -h            Show this help
+  --                    Pass remaining args to the agent (e.g., -- --extra-tags)
+
+── Commands ─────────────────────────────────────────────────────────────────────
+  ralph dashboard [--port N] [--open]
+                      Start a web UI at http://localhost:5000 to monitor the
+                      loop, view the plan, read logs, and inject context notes
+  --status            Show current loop state and iteration history
   --status --tasks    Show status including current task list
-  --add-context TEXT  Add context for the next iteration (or edit .ralph/ralph-context.md)
-  --clear-context     Clear any pending context
+  --add-context TEXT  Inject a context note into the next iteration's prompt
+  --clear-context     Clear any pending context note
   --list-tasks        Display the current task list with indices
   --add-task "desc"   Add a new task to the list
   --remove-task N     Remove task at index N (including subtasks)
+  --init-presets      Write a starter presets.json to .ralph/presets.json
 
-Examples:
+── Examples ─────────────────────────────────────────────────────────────────────
   ralph "Build a REST API for todos"
   ralph "Fix the auth bug" --max-iterations 10
   ralph "Add tests" --completion-promise "ALL TESTS PASS" --model openai/gpt-5.1
-  ralph "Fix the bug" --agent codex --model gpt-5-codex
+  ralph "Build feature" --plan                              # enable plan mode
+  ralph --init-presets && ralph --preset example            # use a preset
+  ralph "Fix the bug" --agent aider --model ollama/qwen2.5-coder \\
+        --base-url http://localhost:11434/v1                # local model via Ollama
   ralph --prompt-file ./prompt.md --max-iterations 5
-  ralph --status                                        # Check loop status
-  ralph --add-context "Focus on the auth module first"  # Add hint for next iteration
-  ralph "Build API" -- --agent build                    # Pass flags to the agent
-  ralph "Fix the bug" --agent aider --model ollama/qwen2.5-coder --base-url http://localhost:11434/v1
+  ralph --status                                            # check loop status
+  ralph --add-context "Focus on the auth module"           # hint for next iter
+  ralph "Build API" -- --agent build                        # pass flags to agent
+  ralph dashboard --open                                    # open web UI
 
-How it works:
+── How it works ─────────────────────────────────────────────────────────────────
   1. Sends your prompt to the selected AI agent
-  2. AI agent works on the task
-  3. Checks output for completion promise
-  4. If not complete, repeats with same prompt
-  5. AI sees its previous work in files
-  6. Continues until promise detected or max iterations
+  2. Agent works on the task; git commits are scanned for issues automatically
+  3. Checks output for the completion promise
+  4. If not complete, repeats with the same prompt (agent sees its previous work)
+  5. Continues until the promise is detected or max iterations is reached
 
 To stop manually: Ctrl+C
 
@@ -394,6 +459,15 @@ Learn more: https://ghuntley.com/ralph/
 
 if (args.includes("--version") || args.includes("-v")) {
   console.log(`ralph ${VERSION}`);
+  process.exit(0);
+}
+
+if (args[0] === "dashboard") {
+  const portIndex = args.indexOf("--port");
+  const port = portIndex !== -1 ? parseInt(args[portIndex + 1] || "5000") : 5000;
+  const openBrowser = args.includes("--open");
+  const { startDashboard } = await import("./dashboard.ts");
+  await startDashboard(port, openBrowser, process.cwd());
   process.exit(0);
 }
 
@@ -487,6 +561,9 @@ if (args.includes("--status")) {
     if (state.tasksMode) {
       console.log(`   Tasks Mode:   ENABLED`);
       console.log(`   Task Promise: ${state.taskPromise}`);
+    }
+    if (state.planMode) {
+      console.log(`   Plan Mode:    ENABLED`);
     }
     console.log(`   Prompt:       ${state.prompt.substring(0, 60)}${state.prompt.length > 60 ? "..." : ""}`);
     if (rotationActive) {
@@ -874,6 +951,8 @@ let streamOutput = true;
 let verboseTools = false;
 let promptSource = "";
 let handleQuestions = true;
+let planMode = false;
+let presetName = "";
 
 const promptParts: string[] = [];
 let extraAgentFlags: string[] = [];
@@ -1012,12 +1091,78 @@ for (let i = 0; i < args.length; i++) {
     handleQuestions = true;
   } else if (arg === "--no-questions") {
     handleQuestions = false;
+  } else if (arg === "--plan") {
+    planMode = true;
+  } else if (arg === "--preset") {
+    const val = args[++i];
+    if (!val) {
+      console.error("Error: --preset requires a name");
+      process.exit(1);
+    }
+    presetName = val;
+  } else if (arg === "--init-presets") {
+    const presetsDir = join(process.cwd(), ".ralph");
+    const presetsFilePath = join(presetsDir, "presets.json");
+    if (!existsSync(presetsDir)) {
+      mkdirSync(presetsDir, { recursive: true });
+    }
+    const defaultPresets: RalphPresetsConfig = {
+      version: "1.0",
+      defaults: {
+        agent: "opencode",
+        maxIterations: 50,
+      },
+      presets: {
+        example: {
+          prompt: "Build a simple REST API with CRUD operations.",
+          agent: "claude-code",
+          maxIterations: 30,
+          completionPromise: "COMPLETE",
+        },
+      },
+    };
+    writeFileSync(presetsFilePath, JSON.stringify(defaultPresets, null, 2));
+    console.log(`Created default presets config at: ${presetsFilePath}`);
+    console.log(`Edit this file to add your own presets.`);
+    process.exit(0);
   } else if (arg.startsWith("-")) {
     console.error(`Error: Unknown option: ${arg}`);
     console.error("Run 'ralph --help' for available options");
     process.exit(1);
   } else {
     promptParts.push(arg);
+  }
+}
+
+// Apply preset values (CLI flags always win over preset values)
+if (presetName) {
+  const presetsConfig = loadPresets();
+  if (!presetsConfig) {
+    console.error(`Error: No presets.json found. Run 'ralph --init-presets' to create one.`);
+    process.exit(1);
+  }
+  const preset = getPreset(presetName, presetsConfig);
+  if (!preset) {
+    console.error(`Error: Preset '${presetName}' not found in presets.json`);
+    process.exit(1);
+  }
+  // Only apply preset values if CLI didn't set them
+  if (!promptParts.length && !promptFile && preset.prompt) {
+    promptParts.push(preset.prompt);
+  }
+  if (!model && preset.model) model = preset.model;
+  if (!baseUrl && preset.baseUrl) baseUrl = preset.baseUrl;
+  if (maxIterations === 0 && preset.maxIterations) maxIterations = preset.maxIterations;
+  if (minIterations === 1 && preset.minIterations) minIterations = preset.minIterations;
+  if (completionPromise === "COMPLETE" && preset.completionPromise) completionPromise = preset.completionPromise;
+  if (!planMode && preset.planMode) planMode = true;
+  if (preset.agent && !AGENTS[agentType !== "opencode" ? agentType : "opencode"]) {
+    // only apply if the user didn't explicitly set --agent
+  }
+  if (preset.agent && agentType === "opencode" && preset.agent !== "opencode") {
+    if (AGENTS[preset.agent]) {
+      agentType = preset.agent as AgentType;
+    }
   }
 }
 
@@ -1101,6 +1246,7 @@ interface RalphState {
   agent: AgentType;
   rotation?: string[];
   rotationIndex?: number;
+  planMode?: boolean;
 }
 
 // Create or update state
@@ -1352,12 +1498,77 @@ function loadCustomPromptTemplate(templatePath: string, state: RalphState): stri
   }
 }
 
+const GIT_ISSUE_KEYWORDS = ["TODO", "FIXME", "ERROR", "FAIL", "BROKEN", "BUG", "HACK"];
+
+async function parseGitLogIssues(): Promise<string[]> {
+  try {
+    const log = await $`git log --oneline -10`.text();
+    return log.split("\n")
+      .filter(line => GIT_ISSUE_KEYWORDS.some(kw => line.toUpperCase().includes(kw)))
+      .map(line => line.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Build the plan mode section injected into the prompt.
+ */
+function buildPlanModeSection(state: RalphState): string {
+  const planPath = join(process.cwd(), "IMPLEMENTATION_PLAN.md");
+  const activityPath = join(process.cwd(), "activity.md");
+  const planExists = existsSync(planPath);
+  const activityExists = existsSync(activityPath);
+
+  if (state.iteration === 1 && !planExists && !activityExists) {
+    return `
+## Plan Mode: Getting Started
+
+This is iteration 1 and no planning files exist yet. Please do the following:
+1. Create \`IMPLEMENTATION_PLAN.md\` in the project root with a structured plan (tasks, subtasks, status columns).
+2. Create \`activity.md\` in the project root and log your first entry (date, iteration, what you plan to do).
+
+---
+`;
+  }
+
+  let section = `\n## Plan Mode: Active Planning Files\n\n`;
+
+  if (planExists) {
+    try {
+      const planContent = readFileSync(planPath, "utf-8");
+      section += `### IMPLEMENTATION_PLAN.md\n\n\`\`\`markdown\n${planContent.trim()}\n\`\`\`\n\n`;
+    } catch {
+      section += `### IMPLEMENTATION_PLAN.md\n\n(error reading file)\n\n`;
+    }
+  } else {
+    section += `### IMPLEMENTATION_PLAN.md\n\n(not found — please create it)\n\n`;
+  }
+
+  if (activityExists) {
+    try {
+      const activityLines = readFileSync(activityPath, "utf-8").split("\n");
+      const last50 = activityLines.slice(-50).join("\n");
+      section += `### activity.md (last 50 lines)\n\n\`\`\`markdown\n${last50.trim()}\n\`\`\`\n\n`;
+    } catch {
+      section += `### activity.md\n\n(error reading file)\n\n`;
+    }
+  } else {
+    section += `### activity.md\n\n(not found — please create it)\n\n`;
+  }
+
+  section += `**Before and after making changes:** Update task statuses in IMPLEMENTATION_PLAN.md and append a new entry to activity.md.\n\n---\n`;
+  return section;
+}
+
 /**
  * Build the prompt for the current iteration.
  * @param state - Current loop state
  * @param _agent - Agent config (reserved for future agent-specific prompt customization)
+ * @param gitIssues - Recent git commits with issue keywords
  */
-function buildPrompt(state: RalphState, _agent: AgentConfig): string {
+function buildPrompt(state: RalphState, _agent: AgentConfig, gitIssues: string[] = []): string {
   // Use custom template if provided
   if (promptTemplatePath) {
     const customPrompt = loadCustomPromptTemplate(promptTemplatePath, state);
@@ -1375,6 +1586,12 @@ ${context}
 `
     : "";
 
+  const gitSection = gitIssues.length
+    ? `\n## Recent Git Issues (fix these before advancing)\n\n${gitIssues.map(l => `- ${l}`).join("\n")}\n\n---\n`
+    : "";
+
+  const planSection = state.planMode ? buildPlanModeSection(state) : "";
+
   // Tasks mode: use task-specific instructions
   if (state.tasksMode) {
     const tasksSection = getTasksModeSection(state);
@@ -1382,7 +1599,7 @@ ${context}
 # Ralph Wiggum Loop - Iteration ${state.iteration}
 
 You are in an iterative development loop working through a task list.
-${contextSection}${tasksSection}
+${contextSection}${gitSection}${planSection}${tasksSection}
 ## Your Main Goal
 
 ${state.prompt}
@@ -1410,7 +1627,7 @@ Now, work on the current task. Good luck!
 # Ralph Wiggum Loop - Iteration ${state.iteration}
 
 You are in an iterative development loop. Work on the task below until you can genuinely complete it.
-${contextSection}
+${contextSection}${gitSection}${planSection}
 ## Your Task
 
 ${state.prompt}
@@ -1894,6 +2111,7 @@ async function runRalphLoop(): Promise<void> {
     baseUrl = existingState.baseUrl ?? "";
     agentType = existingState.agent;
     rotation = existingState.rotation ?? null;
+    planMode = existingState.planMode ?? false;
     console.log(`🔄 Resuming Ralph loop from ${statePath}`);
   }
 
@@ -1957,6 +2175,7 @@ async function runRalphLoop(): Promise<void> {
     agent: initialAgentType,
     rotation: rotation ?? undefined,
     rotationIndex: rotationActive ? 0 : undefined,
+    planMode: planMode || undefined,
   };
 
   if (!resuming) {
@@ -2075,7 +2294,8 @@ async function runRalphLoop(): Promise<void> {
     const agentConfig = AGENTS[currentAgent];
 
     // Build the prompt
-    const fullPrompt = buildPrompt(state, agentConfig);
+    const gitIssues = await parseGitLogIssues();
+    const fullPrompt = buildPrompt(state, agentConfig, gitIssues);
     const iterationStart = Date.now();
 
     try {
