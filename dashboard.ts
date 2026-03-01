@@ -632,6 +632,17 @@ const GLOBAL_CSS = `
     flex-shrink: 0;
   }
 
+  .sidebar-stop-wrap {
+    padding: 8px 8px 0;
+    flex-shrink: 0;
+  }
+  .sidebar-stop-wrap .btn {
+    width: 100%;
+    font-size: 12px;
+    padding: 6px 8px;
+    justify-content: center;
+  }
+
   .main {
     margin-left: var(--sidebar-w);
     flex: 1;
@@ -1314,12 +1325,34 @@ function htmlPage(
       ${navItem("/console", "🖥", "Console")}
       ${navItem("/readme", "📖", "Docs")}
     </nav>
+    <div class="sidebar-stop-wrap" id="sidebar-stop-wrap" style="display:${isActive ? "block" : "none"}">
+      <form method="POST" action="/stop"
+            onsubmit="return confirm('Stop the running Ralph loop?')">
+        <button type="submit" class="btn btn-danger">⏹ Stop Loop</button>
+      </form>
+    </div>
     <div class="sidebar-footer">Ralph Wiggum</div>
   </aside>
   <main class="main">
     ${body}
   </main>
 </div>
+<script>
+(function() {
+  setInterval(async function() {
+    try {
+      const s = await (await fetch('/api/status')).json();
+      const dot = document.getElementById('status-dot');
+      if (dot) {
+        dot.className = s.active ? 'status-dot active' : 'status-dot';
+        dot.title = s.active ? 'Active \u2014 iteration ' + (s.iteration ?? '?') : 'No active loop';
+      }
+      const wrap = document.getElementById('sidebar-stop-wrap');
+      if (wrap) wrap.style.display = s.active ? 'block' : 'none';
+    } catch {}
+  }, 5000);
+})();
+</script>
 </body>
 </html>`;
 }
@@ -1331,9 +1364,13 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
   const isActive = state?.active === true;
 
   const agentWarning = isActive
-    ? `<div class="alert alert-warning">
-        ⚠ A loop is already running (iteration ${state?.iteration ?? "?"}). Launching another may cause conflicts.
-        <a href="/status" style="margin-left:8px">View Status →</a>
+    ? `<div class="alert alert-warning" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>⚠ A loop is already running (iteration ${state?.iteration ?? "?"}).</span>
+        <a href="/status">View Status →</a>
+        <form method="POST" action="/stop" style="margin-left:auto"
+              onsubmit="return confirm('Stop the running Ralph loop?')">
+          <button type="submit" class="btn btn-danger btn-sm">⏹ Stop Loop</button>
+        </form>
        </div>`
     : "";
 
@@ -1736,7 +1773,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
         btn.textContent = '⏳ Enriching…';
         status.style.display = 'block';
         status.style.color = 'var(--text-muted)';
-        status.textContent = 'Sending to LLM…';
+        status.textContent = 'Sending to LLM… (may take up to 2 min for local models)';
 
         try {
           const agent = document.getElementById('agent').value.trim();
@@ -2797,12 +2834,16 @@ function opencodeConfigPath(): string {
   );
 }
 
+type OpencodeBackend =
+  | { type: "openai-compat"; baseUrl: string; model: string }
+  | { type: "anthropic"; apiKey: string; model: string };
+
 /**
- * Read opencode's config and resolve { baseUrl, model } for enrichment.
+ * Read opencode's config and resolve a backend for enrichment.
+ * Handles both local providers (with baseURL) and cloud providers (Anthropic).
  * modelFromForm may be "providerKey/modelId" or a bare model name or empty.
- * Returns null if config is missing or no provider with a baseURL is found.
  */
-function resolveOpencodeModel(modelFromForm: string): { baseUrl: string; model: string } | null {
+function resolveOpencodeBackend(modelFromForm: string): OpencodeBackend | null {
   const cfgPath = opencodeConfigPath();
   if (!existsSync(cfgPath)) return null;
   let cfg: Record<string, any>;
@@ -2811,23 +2852,48 @@ function resolveOpencodeModel(modelFromForm: string): { baseUrl: string; model: 
   const providers = cfg.provider as Record<string, any> | undefined;
   if (!providers || typeof providers !== "object") return null;
 
+  let targetProvKey: string | undefined;
+  let targetModelId: string = modelFromForm;
+
   // "providerKey/modelId" → resolve that provider directly
   if (modelFromForm.includes("/")) {
     const slash = modelFromForm.indexOf("/");
-    const provKey = modelFromForm.slice(0, slash);
-    const modelId = modelFromForm.slice(slash + 1);
-    const baseURL = providers[provKey]?.options?.baseURL as string | undefined;
-    if (baseURL) return { baseUrl: baseURL.replace(/\/+$/, ""), model: modelId };
+    targetProvKey = modelFromForm.slice(0, slash);
+    targetModelId = modelFromForm.slice(slash + 1);
   }
 
-  // Otherwise pick the first provider that has a baseURL
-  for (const prov of Object.values(providers)) {
+  if (targetProvKey) {
+    const prov = providers[targetProvKey];
+    if (prov) {
+      const baseURL = prov?.options?.baseURL as string | undefined;
+      if (baseURL) return { type: "openai-compat", baseUrl: baseURL.replace(/\/+$/, ""), model: targetModelId };
+      if (targetProvKey === "anthropic") {
+        const apiKey = prov?.apiKey ?? prov?.options?.apiKey ?? process.env.ANTHROPIC_API_KEY;
+        if (apiKey) return { type: "anthropic", apiKey, model: targetModelId || "claude-haiku-4-5-20251001" };
+      }
+    }
+  }
+
+  // Scan for local (baseURL) providers first
+  for (const [, prov] of Object.entries(providers)) {
     const baseURL = (prov as any)?.options?.baseURL as string | undefined;
     if (!baseURL) continue;
     const models = (prov as any)?.models as Record<string, any> | undefined;
-    const model = modelFromForm || (models ? Object.keys(models)[0] : "") || "";
-    if (model) return { baseUrl: baseURL.replace(/\/+$/, ""), model };
+    const model = targetModelId || (models ? Object.keys(models)[0] : "") || "";
+    if (model) return { type: "openai-compat", baseUrl: baseURL.replace(/\/+$/, ""), model };
   }
+
+  // Fall back to Anthropic provider in config
+  const anthropicProv = providers.anthropic;
+  if (anthropicProv) {
+    const apiKey = anthropicProv?.apiKey ?? anthropicProv?.options?.apiKey ?? process.env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      const models = anthropicProv?.models as Record<string, any> | undefined;
+      const model = targetModelId || (models ? Object.keys(models)[0] : "") || "claude-haiku-4-5-20251001";
+      return { type: "anthropic", apiKey, model };
+    }
+  }
+
   return null;
 }
 
@@ -2898,26 +2964,37 @@ async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Re
 
   let resolvedBaseUrl = baseUrl;
   let resolvedModel   = modelRaw;
+  let resolvedAnthropicKey: string | undefined; // extracted from opencode config
 
-  if (!resolvedBaseUrl && agent === "opencode") {
-    const ocResolved = resolveOpencodeModel(modelRaw);
+  // "" means default which is opencode
+  const effectiveAgent = agent || "opencode";
+
+  if (!resolvedBaseUrl && effectiveAgent === "opencode") {
+    const ocResolved = resolveOpencodeBackend(modelRaw);
     if (ocResolved) {
-      resolvedBaseUrl = ocResolved.baseUrl;
-      resolvedModel   = ocResolved.model;
+      if (ocResolved.type === "openai-compat") {
+        resolvedBaseUrl = ocResolved.baseUrl;
+        resolvedModel   = ocResolved.model;
+      } else {
+        resolvedAnthropicKey = ocResolved.apiKey;
+        if (!resolvedModel) resolvedModel = ocResolved.model;
+      }
     }
   }
 
-  const isClaudeBased = agent === "claude-code" || resolvedModel.toLowerCase().startsWith("claude");
+  const isClaudeBased = agent === "claude-code" || resolvedModel.toLowerCase().includes("claude");
+  const effectiveAnthropicKey = resolvedAnthropicKey ?? process.env.ANTHROPIC_API_KEY;
+
   const useAnthropicKey =
     !resolvedBaseUrl &&
-    !!process.env.ANTHROPIC_API_KEY &&
-    (isClaudeBased || !process.env.OPENAI_API_KEY);
+    !!effectiveAnthropicKey &&
+    (isClaudeBased || !!resolvedAnthropicKey || !process.env.OPENAI_API_KEY);
 
   const useOpenAICompat = !!resolvedBaseUrl || (!useAnthropicKey && !!process.env.OPENAI_API_KEY);
 
   if (!useAnthropicKey && !useOpenAICompat) {
-    const hint = agent === "opencode"
-      ? "opencode config not found or has no local provider. Enter a Base URL or set ANTHROPIC_API_KEY / OPENAI_API_KEY."
+    const hint = effectiveAgent === "opencode"
+      ? "Could not resolve enrichment backend. Configure a provider in opencode.json, or set ANTHROPIC_API_KEY / OPENAI_API_KEY."
       : "Enter a Base URL (e.g. http://localhost:11434/v1), or set ANTHROPIC_API_KEY / OPENAI_API_KEY.";
     return new Response(JSON.stringify({ error: hint }), {
       status: 400, headers: { "Content-Type": "application/json" },
@@ -2927,18 +3004,31 @@ async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Re
   const projectCwd = loadCurrentProject(serverCwd);
   const context = buildEnrichmentContext(projectCwd);
 
-  const systemPrompt = `You are a software task specification assistant.
+  const systemPrompt = `You are an expert software engineer. Your ONLY job is to expand a rough task description into a detailed, self-contained specification for an autonomous AI coding agent.
 
-Below is project context (for your understanding only — do NOT include it in the output):
+PROJECT CONTEXT (use to infer specifics — do NOT copy verbatim into output):
 ${context}
+END OF CONTEXT
 
-Your job: rewrite the user's rough task description into a clear, specific, actionable task.
-Rules:
-- Return ONLY the improved task description as plain text — no preamble, no explanations, no project context
-- Be specific: reference the relevant files, functions, or components from the project context
-- Keep the same intent as the original
-- Use imperative mood ("Fix…", "Add…", "Refactor…")
-- 2–6 sentences is ideal`;
+ABSOLUTE RULES — breaking any rule makes the output useless:
+1. NEVER ask questions. NEVER write "could you clarify", "I need more information", "please provide", or anything that implies waiting for a response. The agent is autonomous — it cannot answer you.
+2. If something is unclear, invent a reasonable assumption and state it explicitly in the output. Do not stall.
+3. Output ONLY the task specification. No preamble ("Here is…", "Sure!", "Of course!"), no meta-commentary, no project context dump.
+4. Minimum length: 250 words. Be thorough — a short output is a failed output.
+5. Use imperative mood throughout ("Add…", "Modify…", "Ensure…").
+6. Reference real file names, function names, routes, and components visible in the project context.
+
+REQUIRED CONTENT (cover all of these, in any order):
+• Exact behaviour: what changes, what the UI/API/logic should do after the task
+• Files and components most likely to be modified or created
+• Step-by-step implementation approach the agent should follow
+• Acceptance criteria: concrete, testable conditions that confirm the task is done
+• Edge cases and error conditions to handle
+• Explicit assumptions made where the original description was vague
+
+Write as a single cohesive block of paragraphs — no markdown headers, no bullet points in the output itself. Be specific, verbose, and leave zero ambiguity for the agent.`;
+
+
 
   try {
     let enriched = "";
@@ -2950,16 +3040,16 @@ Rules:
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": process.env.ANTHROPIC_API_KEY!,
+          "x-api-key": effectiveAnthropicKey!,
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
           model,
-          max_tokens: 600,
+          max_tokens: 2000,
           system: systemPrompt,
           messages: [{ role: "user", content: rawPrompt }],
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(120_000),
       });
       if (!resp.ok) {
         const txt = await resp.text().catch(() => "");
@@ -2985,10 +3075,10 @@ Rules:
             { role: "system", content: systemPrompt },
             { role: "user", content: rawPrompt },
           ],
-          max_tokens: 600,
+          max_tokens: 2000,
           temperature: 0.3,
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(120_000),
       });
       if (!resp.ok) {
         const txt = await resp.text().catch(() => "");
