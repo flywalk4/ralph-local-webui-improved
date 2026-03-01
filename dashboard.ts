@@ -21,6 +21,7 @@ function contextPath(cwd: string): string { return join(stateDir(cwd), "ralph-co
 function planPath(cwd: string): string { return join(cwd, "IMPLEMENTATION_PLAN.md"); }
 function activityPath(cwd: string): string { return join(cwd, "activity.md"); }
 function pidPath(cwd: string): string { return join(stateDir(cwd), "dashboard-pid.json"); }
+function logPath(cwd: string): string { return join(stateDir(cwd), "ralph-output.log"); }
 
 // ─── Data loaders ─────────────────────────────────────────────────────────────
 
@@ -53,16 +54,30 @@ function lastNLines(text: string, n: number): string {
 
 // ─── PID helpers ──────────────────────────────────────────────────────────────
 
-function storePid(cwd: string, pid: number): void {
-  const dir = stateDir(cwd);
+function storePid(serverCwd: string, pid: number, projectCwd: string): void {
+  const dir = stateDir(serverCwd);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(pidPath(cwd), JSON.stringify({ pid, startedAt: new Date().toISOString() }));
+  writeFileSync(pidPath(serverCwd), JSON.stringify({
+    pid,
+    startedAt: new Date().toISOString(),
+    projectCwd,
+  }));
 }
 
 function loadPid(cwd: string): number | null {
   const p = pidPath(cwd);
   if (!existsSync(p)) return null;
   try { return JSON.parse(readFileSync(p, "utf-8")).pid ?? null; } catch { return null; }
+}
+
+/**
+ * Returns the project cwd where ralph was last launched from the dashboard.
+ * Falls back to serverCwd if no pid file exists.
+ */
+function loadProjectCwd(serverCwd: string): string {
+  const p = pidPath(serverCwd);
+  if (!existsSync(p)) return serverCwd;
+  try { return JSON.parse(readFileSync(p, "utf-8")).projectCwd ?? serverCwd; } catch { return serverCwd; }
 }
 
 // ─── Launch / Stop ────────────────────────────────────────────────────────────
@@ -107,18 +122,34 @@ async function launchRalph(formData: URLSearchParams, serverCwd: string): Promis
 
   const extraCwd = formData.get("cwd")?.trim() || serverCwd;
 
-  // Create the directory if it doesn't exist yet
-  mkdirSync(extraCwd, { recursive: true });
+  // Create the project directory and its .ralph folder if they don't exist
+  mkdirSync(stateDir(extraCwd), { recursive: true });
+
+  // Write stdout+stderr to a log file so the dashboard can display them
+  const lp = logPath(extraCwd);
+  writeFileSync(lp, `=== Ralph started at ${new Date().toISOString()} ===\n`);
+  const { openSync, closeSync } = await import("fs");
+  const logFd = openSync(lp, "a");
 
   const proc = Bun.spawn(args, {
     cwd: extraCwd,
     detached: true,
-    stdout: "ignore",
-    stderr: "ignore",
+    stdout: logFd,
+    stderr: logFd,
     stdin: "ignore",
   });
 
-  storePid(serverCwd, proc.pid);
+  closeSync(logFd);
+  storePid(serverCwd, proc.pid, extraCwd);
+
+  // Print to the dashboard terminal so the user knows ralph is running
+  console.log(`\n${"─".repeat(60)}`);
+  console.log(`  ⚡ Ralph launched  (PID ${proc.pid})`);
+  console.log(`  📁 Project:  ${extraCwd}`);
+  console.log(`  📄 Log:      ${lp}`);
+  console.log(`  🌐 Monitor:  http://localhost:${(globalThis as any).__dashboardPort ?? 5000}/status`);
+  console.log(`${"─".repeat(60)}\n`);
+
   return null; // success
 }
 
@@ -824,6 +855,7 @@ function htmlPage(
       ${navItem("/logs", "🗂", "Logs")}
       <hr class="sidebar-sep">
       ${navItem("/intervene", "✦", "Intervene")}
+      ${navItem("/console", "🖥", "Console")}
       ${navItem("/readme", "📖", "Docs")}
     </nav>
     <div class="sidebar-footer">Ralph Wiggum</div>
@@ -1217,8 +1249,9 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
 // ─── Route: Status ────────────────────────────────────────────────────────────
 
 function routeStatus(cwd: string): string {
-  const state = loadState(cwd);
-  const history = loadHistory(cwd);
+  const projectCwd = loadProjectCwd(cwd);
+  const state = loadState(projectCwd);
+  const history = loadHistory(projectCwd);
   const hasPid = existsSync(pidPath(cwd));
   const isActive = state?.active === true;
 
@@ -1318,8 +1351,9 @@ function routeStatus(cwd: string): string {
 // ─── Route: Plan ─────────────────────────────────────────────────────────────
 
 function routePlan(cwd: string): string {
-  const state = loadState(cwd);
-  const p = planPath(cwd);
+  const projectCwd = loadProjectCwd(cwd);
+  const state = loadState(projectCwd);
+  const p = planPath(projectCwd);
   if (!existsSync(p)) {
     return htmlPage("Plan", `
       <div class="page-header"><h1>📋 Implementation Plan</h1></div>
@@ -1339,8 +1373,9 @@ function routePlan(cwd: string): string {
 // ─── Route: Activity ─────────────────────────────────────────────────────────
 
 function routeActivity(cwd: string): string {
-  const state = loadState(cwd);
-  const p = activityPath(cwd);
+  const projectCwd = loadProjectCwd(cwd);
+  const state = loadState(projectCwd);
+  const p = activityPath(projectCwd);
   if (!existsSync(p)) {
     return htmlPage("Activity", `
       <div class="page-header"><h1>📝 Activity Log</h1></div>
@@ -1368,8 +1403,9 @@ function routeActivity(cwd: string): string {
 // ─── Route: Logs ──────────────────────────────────────────────────────────────
 
 function routeLogs(cwd: string): string {
-  const state = loadState(cwd);
-  const history = loadHistory(cwd);
+  const projectCwd = loadProjectCwd(cwd);
+  const state = loadState(projectCwd);
+  const history = loadHistory(projectCwd);
   if (!history || !Array.isArray((history as { iterations?: unknown[] }).iterations)) {
     return htmlPage("Logs", `
       <div class="page-header"><h1>🗂 Iteration Logs</h1></div>
@@ -1437,8 +1473,9 @@ function routeLogs(cwd: string): string {
 // ─── Route: Intervene ─────────────────────────────────────────────────────────
 
 function routeInterveneGet(cwd: string, flash?: { type: string; message: string }): string {
-  const state = loadState(cwd);
-  const current = loadContext(cwd);
+  const projectCwd = loadProjectCwd(cwd);
+  const state = loadState(projectCwd);
+  const current = loadContext(projectCwd);
   const flashHtml = flash
     ? `<div class="alert alert-${flash.type}">${escapeHtml(flash.message)}</div>`
     : "";
@@ -1473,25 +1510,69 @@ function routeInterveneGet(cwd: string, flash?: { type: string; message: string 
 }
 
 async function routeIntervenePost(req: Request, cwd: string): Promise<Response> {
+  const projectCwd = loadProjectCwd(cwd);
   let body = "";
   try { body = await req.text(); } catch { return new Response("Bad request", { status: 400 }); }
   const context = new URLSearchParams(body).get("context") ?? "";
-  const dir = stateDir(cwd);
+  const dir = stateDir(projectCwd);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "ralph-context.md"), context.trim());
   return new Response(null, { status: 302, headers: { Location: "/intervene?saved=1" } });
 }
 
 function routeInterveneClear(cwd: string): Response {
-  const p = contextPath(cwd);
+  const p = contextPath(loadProjectCwd(cwd));
   if (existsSync(p)) writeFileSync(p, "");
   return new Response(null, { status: 302, headers: { Location: "/intervene?cleared=1" } });
 }
 
 // ─── Route: README ────────────────────────────────────────────────────────────
 
+function routeConsole(cwd: string): string {
+  const projectCwd = loadProjectCwd(cwd);
+  const state = loadState(projectCwd);
+  const isActive = state?.active === true;
+  const lp = logPath(projectCwd);
+  const content = existsSync(lp) ? lastNLines(readFileSafe(lp), 200) : "";
+
+  const extra = isActive
+    ? `<script>
+        setInterval(async () => {
+          try {
+            const r = await fetch('/api/console-log');
+            const t = await r.text();
+            const el = document.getElementById('console-out');
+            if (el && el.dataset.content !== t) {
+              el.dataset.content = t;
+              el.textContent = t;
+              el.scrollTop = el.scrollHeight;
+            }
+          } catch {}
+        }, 2000);
+      </script>`
+    : "";
+
+  return htmlPage("Console", `
+    <div class="page-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <h1>🖥 Console Output</h1>
+        <button class="btn btn-ghost btn-sm" onclick="location.reload()">↻ Refresh</button>
+        ${isActive ? `<span class="badge badge-green">● Live — updating every 2s</span>` : ""}
+      </div>
+      <p class="page-subtitle">${escapeHtml(lp)} — last 200 lines</p>
+    </div>
+    ${content
+      ? `<pre id="console-out" style="max-height:72vh;overflow-y:auto">${escapeHtml(content)}</pre>
+         <script>
+           const el = document.getElementById('console-out');
+           el.scrollTop = el.scrollHeight;
+         </script>`
+      : `<p class="empty-state">No output yet. Launch a Ralph loop first.</p>`}
+  `, "/console", extra, state);
+}
+
 function routeReadme(cwd: string): string {
-  const state = loadState(cwd);
+  const state = loadState(loadProjectCwd(cwd));
   if (!existsSync(RALPH_README_PATH)) {
     return htmlPage("Docs", `
       <div class="page-header"><h1>📖 Docs</h1></div>
@@ -1628,10 +1709,18 @@ async function routeStop(cwd: string): Promise<Response> {
 // ─── Route: GET /api/status ───────────────────────────────────────────────────
 
 function routeApiStatus(cwd: string): Response {
-  const state = loadState(cwd);
+  const state = loadState(loadProjectCwd(cwd));
   return new Response(JSON.stringify(state ?? { active: false }), {
     headers: { "Content-Type": "application/json" },
   });
+}
+
+// ─── Route: GET /api/console-log ─────────────────────────────────────────────
+
+function routeApiConsoleLog(cwd: string): Response {
+  const lp = logPath(loadProjectCwd(cwd));
+  const content = existsSync(lp) ? lastNLines(readFileSafe(lp), 200) : "";
+  return new Response(content, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
 
 // ─── Route: GET /api/models ───────────────────────────────────────────────────
@@ -1664,6 +1753,7 @@ async function routeApiModels(req: Request): Promise<Response> {
 // ─── Server ───────────────────────────────────────────────────────────────────
 
 export async function startDashboard(port: number, openBrowser: boolean, cwd: string): Promise<void> {
+  (globalThis as any).__dashboardPort = port;
   const server = Bun.serve({
     port,
     async fetch(req: Request): Promise<Response> {
@@ -1690,6 +1780,8 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
       if (path === "/activity")           return html(routeActivity(cwd));
       if (path === "/logs")               return html(routeLogs(cwd));
       if (path === "/readme")             return html(routeReadme(cwd));
+      if (path === "/console")            return html(routeConsole(cwd));
+      if (path === "/api/console-log")    return routeApiConsoleLog(cwd);
       if (path === "/intervene") {
         if (req.method === "POST") return routeIntervenePost(req, cwd);
         let flash: { type: string; message: string } | undefined;
