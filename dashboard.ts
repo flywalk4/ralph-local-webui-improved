@@ -2788,6 +2788,49 @@ async function routeApiProjectInfo(req: Request): Promise<Response> {
 
 // ─── Route: POST /api/enrich-prompt ──────────────────────────────────────────
 
+/** Path to opencode's user config — same logic as ralph.ts OPENCODE_USER_CONFIG_PATH. */
+function opencodeConfigPath(): string {
+  return join(
+    process.env.XDG_CONFIG_HOME ??
+      join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".config"),
+    "opencode", "opencode.json"
+  );
+}
+
+/**
+ * Read opencode's config and resolve { baseUrl, model } for enrichment.
+ * modelFromForm may be "providerKey/modelId" or a bare model name or empty.
+ * Returns null if config is missing or no provider with a baseURL is found.
+ */
+function resolveOpencodeModel(modelFromForm: string): { baseUrl: string; model: string } | null {
+  const cfgPath = opencodeConfigPath();
+  if (!existsSync(cfgPath)) return null;
+  let cfg: Record<string, any>;
+  try { cfg = JSON.parse(readFileSync(cfgPath, "utf-8")); } catch { return null; }
+
+  const providers = cfg.provider as Record<string, any> | undefined;
+  if (!providers || typeof providers !== "object") return null;
+
+  // "providerKey/modelId" → resolve that provider directly
+  if (modelFromForm.includes("/")) {
+    const slash = modelFromForm.indexOf("/");
+    const provKey = modelFromForm.slice(0, slash);
+    const modelId = modelFromForm.slice(slash + 1);
+    const baseURL = providers[provKey]?.options?.baseURL as string | undefined;
+    if (baseURL) return { baseUrl: baseURL.replace(/\/+$/, ""), model: modelId };
+  }
+
+  // Otherwise pick the first provider that has a baseURL
+  for (const prov of Object.values(providers)) {
+    const baseURL = (prov as any)?.options?.baseURL as string | undefined;
+    if (!baseURL) continue;
+    const models = (prov as any)?.models as Record<string, any> | undefined;
+    const model = modelFromForm || (models ? Object.keys(models)[0] : "") || "";
+    if (model) return { baseUrl: baseURL.replace(/\/+$/, ""), model };
+  }
+  return null;
+}
+
 /** Collect lightweight project context for prompt enrichment (not sent to user). */
 function buildEnrichmentContext(projectCwd: string): string {
   const parts: string[] = [];
@@ -2844,24 +2887,41 @@ async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Re
   const agent    = String(body.agent  ?? "").trim();
   const modelRaw = String(body.model  ?? "").trim();
 
-  // Determine backend:
-  //   1. base-url set                               → OpenAI-compatible endpoint
-  //   2. claude-code / claude-* model + ANTHROPIC   → Anthropic API
-  //   3. any agent + ANTHROPIC (covers opencode)    → Anthropic API
-  //   4. OPENAI_API_KEY available                   → OpenAI API
-  //   5. error
-  const isClaudeBased = agent === "claude-code" || modelRaw.toLowerCase().startsWith("claude");
+  // ── Resolve which backend to use ─────────────────────────────────────────
+  // Priority:
+  //   1. base-url in form                              → OpenAI-compatible
+  //   2. agent=opencode → read opencode config         → OpenAI-compatible (Ollama etc.)
+  //   3. agent=claude-code or model starts with claude → Anthropic API
+  //   4. ANTHROPIC_API_KEY available                   → Anthropic API
+  //   5. OPENAI_API_KEY available                      → OpenAI API
+  //   6. error
+
+  let resolvedBaseUrl = baseUrl;
+  let resolvedModel   = modelRaw;
+
+  if (!resolvedBaseUrl && agent === "opencode") {
+    const ocResolved = resolveOpencodeModel(modelRaw);
+    if (ocResolved) {
+      resolvedBaseUrl = ocResolved.baseUrl;
+      resolvedModel   = ocResolved.model;
+    }
+  }
+
+  const isClaudeBased = agent === "claude-code" || resolvedModel.toLowerCase().startsWith("claude");
   const useAnthropicKey =
-    !baseUrl &&
+    !resolvedBaseUrl &&
     !!process.env.ANTHROPIC_API_KEY &&
     (isClaudeBased || !process.env.OPENAI_API_KEY);
 
-  const useOpenAICompat = !!baseUrl || (!useAnthropicKey && !!process.env.OPENAI_API_KEY);
+  const useOpenAICompat = !!resolvedBaseUrl || (!useAnthropicKey && !!process.env.OPENAI_API_KEY);
 
   if (!useAnthropicKey && !useOpenAICompat) {
-    return new Response(JSON.stringify({
-      error: "No LLM API configured. Enter a Base URL (e.g. http://localhost:11434/v1), or set ANTHROPIC_API_KEY / OPENAI_API_KEY.",
-    }), { status: 400, headers: { "Content-Type": "application/json" } });
+    const hint = agent === "opencode"
+      ? "opencode config not found or has no local provider. Enter a Base URL or set ANTHROPIC_API_KEY / OPENAI_API_KEY."
+      : "Enter a Base URL (e.g. http://localhost:11434/v1), or set ANTHROPIC_API_KEY / OPENAI_API_KEY.";
+    return new Response(JSON.stringify({ error: hint }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    });
   }
 
   const projectCwd = loadCurrentProject(serverCwd);
@@ -2885,7 +2945,7 @@ Rules:
 
     if (useAnthropicKey) {
       // ── Anthropic Messages API ────────────────────────────────────
-      const model = modelRaw || "claude-haiku-4-5-20251001";
+      const model = resolvedModel || "claude-haiku-4-5-20251001";
       const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -2911,9 +2971,11 @@ Rules:
       enriched = data?.content?.find(b => b.type === "text")?.text?.trim() ?? "";
     } else {
       // ── OpenAI-compatible API ─────────────────────────────────────
-      const apiBase = baseUrl ? (baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`) : "https://api.openai.com/v1";
+      const apiBase = resolvedBaseUrl
+        ? (resolvedBaseUrl.endsWith("/v1") ? resolvedBaseUrl : `${resolvedBaseUrl}/v1`)
+        : "https://api.openai.com/v1";
       const apiKey  = process.env.OPENAI_API_KEY ?? "local";
-      const model   = modelRaw || (baseUrl ? undefined : "gpt-4o-mini");
+      const model   = resolvedModel || (resolvedBaseUrl ? undefined : "gpt-4o-mini");
       const resp = await fetch(`${apiBase}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
