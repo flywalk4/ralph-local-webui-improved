@@ -1418,7 +1418,7 @@ if (!prompt) {
     prompt = existingState.prompt;
   } else if (improvingMode) {
     // Improving-only mode: no initial task — start directly in improvement cycle 1
-    prompt = buildImprovingPrompt(1, improvingMax);
+    prompt = buildImprovingPrompt(1, improvingMax, planMode);
   } else {
     console.error("Error: No prompt provided");
     console.error("Usage: ralph \"Your task description\" [options]");
@@ -1804,13 +1804,16 @@ function buildPlanModeSection(state: RalphState): string {
   const planExists = existsSync(planPath);
   const activityExists = existsSync(activityPath);
 
-  if (state.iteration === 1 && !planExists && !activityExists) {
+  if (state.iteration === 1 && !planExists) {
+    const actNote = activityExists
+      ? `\`activity.md\` already exists — append a new entry for this cycle.`
+      : `Create \`activity.md\` in the project root and log your first entry (date, iteration, what you plan to do).`;
     return `
-## Plan Mode: Getting Started
+## Plan Mode: Create Implementation Plan
 
-This is iteration 1 and no planning files exist yet. Please do the following:
+This is iteration 1 and no \`IMPLEMENTATION_PLAN.md\` exists yet. Please do the following before making any code changes:
 1. Create \`IMPLEMENTATION_PLAN.md\` in the project root with a structured plan (tasks, subtasks, status columns).
-2. Create \`activity.md\` in the project root and log your first entry (date, iteration, what you plan to do).
+2. ${actNote}
 
 ---
 `;
@@ -1856,8 +1859,11 @@ This is iteration 1 and no planning files exist yet. Please do the following:
  * The agent is asked to self-direct: choose the most valuable thing to improve,
  * create a plan, implement it, then signal completion.
  */
-function buildImprovingPrompt(cycle: number, maxCycles: number): string {
+function buildImprovingPrompt(cycle: number, maxCycles: number, planMode = false): string {
   const cycleLabel = maxCycles > 0 ? `Improvement Cycle ${cycle} of ${maxCycles}` : `Improvement Cycle ${cycle}`;
+  const planInstruction = planMode
+    ? `\n**Before writing any code:** Create a fresh \`IMPLEMENTATION_PLAN.md\` in the project root with a structured checklist for this improvement (tasks with \`[ ]\` checkboxes). Update \`activity.md\` as you progress and tick off tasks as you complete them.\n`
+    : "";
   return `# ${cycleLabel}
 
 You have successfully completed the previous task/cycle. Now enter autonomous improvement mode.
@@ -1872,7 +1878,8 @@ Review the current state of the entire project and choose the SINGLE MOST VALUAB
 - **Security** — harden inputs, fix potential vulnerabilities, audit dependencies
 - **New Functionality** — add a feature that would deliver the most value
 
-Pick ONE focused area. If plan mode is active, create a fresh IMPLEMENTATION_PLAN.md for this improvement and update activity.md. Implement the improvement thoroughly, then output COMPLETE when done.`;
+Pick ONE focused area.${planInstruction}
+Implement the improvement thoroughly, then output COMPLETE when done.`;
 }
 
 function buildPrompt(state: RalphState, _agent: AgentConfig, gitIssues: string[] = [], gitDiff = "", consecutiveNoChanges = 0): string {
@@ -2955,7 +2962,7 @@ async function runRalphLoop(): Promise<void> {
             // Reset iteration for the new cycle; update prompt and cycle counter
             state.iteration = 1;
             state.improvingCycle = nextCycle;
-            state.prompt = buildImprovingPrompt(nextCycle, cycleMax);
+            state.prompt = buildImprovingPrompt(nextCycle, cycleMax, state.planMode ?? false);
             clearHistory();
             clearContext();
             clearPendingQuestions();
