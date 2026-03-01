@@ -126,6 +126,16 @@ function loadProjectCwd(serverCwd: string): string {
   try { return JSON.parse(readFileSync(p, "utf-8")).projectCwd ?? serverCwd; } catch { return serverCwd; }
 }
 
+/**
+ * Resolve which project cwd to display.
+ * Prefer an explicit ?cwd= URL param (user switched project manually),
+ * then fall back to the last ralph-launched cwd, then serverCwd.
+ */
+function resolveViewCwd(serverCwd: string, urlCwd: string | null): string {
+  if (urlCwd && urlCwd.trim() && existsSync(urlCwd.trim())) return urlCwd.trim();
+  return loadProjectCwd(serverCwd);
+}
+
 // ─── Launch / Stop ────────────────────────────────────────────────────────────
 
 async function launchRalph(formData: URLSearchParams, serverCwd: string): Promise<string | null> {
@@ -943,6 +953,22 @@ const GLOBAL_CSS = `
     padding: 6px 0;
   }
 
+  /* ── Project selector bar ───────────────────────────────────── */
+  .project-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .project-selector strong { color: var(--text); font-family: monospace; font-size: 12px; }
+  .project-selector .btn { margin-left: auto; flex-shrink: 0; }
+
   /* ── Project info card ───────────────────────────────────────── */
   .project-card {
     background: var(--surface);
@@ -1078,15 +1104,20 @@ function htmlPage(
   body: string,
   activePath: string,
   extraHead = "",
-  state?: Record<string, unknown> | null
+  state?: Record<string, unknown> | null,
+  projectCwd?: string          // when set, appends ?cwd= to nav links
 ): string {
   const isActive = state?.active === true;
   const dotClass = isActive ? "status-dot active" : "status-dot";
   const dotTitle = isActive ? `Active — iteration ${state?.iteration ?? "?"}` : "No active loop";
 
+  const cwdParam = projectCwd ? `?cwd=${encodeURIComponent(projectCwd)}` : "";
   const navItem = (href: string, icon: string, label: string) => {
+    // Don't append cwd to Launch (it has its own cwd field) or Docs/Readme
+    const skipCwd = href === "/launch" || href === "/readme";
+    const fullHref = (!skipCwd && cwdParam) ? href + cwdParam : href;
     const cls = activePath === href ? "nav-item active" : "nav-item";
-    return `<a href="${href}" class="${cls}">
+    return `<a href="${fullHref}" class="${cls}">
       <span class="nav-icon">${icon}</span>
       <span>${label}</span>
     </a>`;
@@ -1698,15 +1729,55 @@ function routeStatus(cwd: string): string {
 
 // ─── Route: Plan ─────────────────────────────────────────────────────────────
 
-function routePlan(cwd: string): string {
-  const projectCwd = loadProjectCwd(cwd);
+/** Compact bar shown on Plan/Activity/etc. pages to switch the viewed project. */
+function projectSelectorBar(projectCwd: string, isWindows: boolean): string {
+  const basename = projectCwd.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? projectCwd;
+  return `
+  <div class="project-selector" id="proj-selector">
+    <span>📁 Project:</span>
+    <strong title="${escapeHtml(projectCwd)}">${escapeHtml(basename)}</strong>
+    <span style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px"
+          title="${escapeHtml(projectCwd)}">${escapeHtml(projectCwd)}</span>
+    <button class="btn btn-ghost btn-sm" onclick="switchProject()"
+      title="Switch to a different project directory">📁 Change</button>
+  </div>
+  <script>
+    const _IS_WINDOWS_SEL = ${JSON.stringify(isWindows)};
+    async function switchProject() {
+      let path = null;
+      if (_IS_WINDOWS_SEL) {
+        const btn = document.querySelector('#proj-selector .btn');
+        if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+        try {
+          const r = await fetch('/api/browse-native');
+          const d = await r.json();
+          path = d.path ?? null;
+        } catch {}
+        if (btn) { btn.textContent = '📁 Change'; btn.disabled = false; }
+      } else {
+        path = prompt('Enter project directory path:');
+      }
+      if (path) {
+        const url = new URL(location.href);
+        url.searchParams.set('cwd', path);
+        location.href = url.toString();
+      }
+    }
+  </script>`;
+}
+
+function routePlan(cwd: string, urlCwd: string | null): string {
+  const projectCwd = resolveViewCwd(cwd, urlCwd);
   const state = loadState(projectCwd);
+  const IS_WIN = process.platform === "win32";
+  const selectorBar = projectSelectorBar(projectCwd, IS_WIN);
   const p = planPath(projectCwd);
   if (!existsSync(p)) {
     return htmlPage("Plan", `
       <div class="page-header"><h1>📋 Implementation Plan</h1></div>
-      <p class="empty-state">No <code>IMPLEMENTATION_PLAN.md</code> found. Run Ralph with <code>--plan</code> to have the agent create one.</p>
-    `, "/plan", "", state);
+      ${selectorBar}
+      <p class="empty-state">No <code>IMPLEMENTATION_PLAN.md</code> found in this project. Run Ralph with <code>--plan</code> to have the agent create one.</p>
+    `, "/plan", "", state, projectCwd);
   }
   const content = readFileSafe(p);
   return htmlPage("Plan", `
@@ -1714,8 +1785,9 @@ function routePlan(cwd: string): string {
       <h1>📋 Implementation Plan</h1>
       <p class="page-subtitle">IMPLEMENTATION_PLAN.md — maintained by the agent</p>
     </div>
+    ${selectorBar}
     <div class="card">${simpleMarkdownToHtml(content)}</div>
-  `, "/plan", "", state);
+  `, "/plan", "", state, projectCwd);
 }
 
 // ─── Route: Activity ─────────────────────────────────────────────────────────
@@ -1815,8 +1887,8 @@ function buildActivityHtml(projectCwd: string, state: Record<string, unknown> | 
     ${timelineHtml}`;
 }
 
-function routeActivity(cwd: string): string {
-  const projectCwd = loadProjectCwd(cwd);
+function routeActivity(cwd: string, urlCwd: string | null): string {
+  const projectCwd = resolveViewCwd(cwd, urlCwd);
   const state = loadState(projectCwd);
   const isActive = state?.active === true;
 
@@ -1833,10 +1905,12 @@ function routeActivity(cwd: string): string {
         });
       }
     }
+    const VIEW_CWD = ${JSON.stringify(projectCwd)};
+    const API_URL = '/api/activity-data?cwd=' + encodeURIComponent(VIEW_CWD);
     let lastRev = '';
     setInterval(async () => {
       try {
-        const r = await fetch('/api/activity-data');
+        const r = await fetch(API_URL);
         const d = await r.json();
         const rev = JSON.stringify(d);
         if (rev === lastRev) return;
@@ -1908,7 +1982,10 @@ function routeActivity(cwd: string): string {
     }
   </script>` : "";
 
-  return htmlPage("Activity", buildActivityHtml(projectCwd, state), "/activity", extraHead, state);
+  const IS_WIN = process.platform === "win32";
+  const selectorBar = projectSelectorBar(projectCwd, IS_WIN);
+  const bodyHtml = selectorBar + buildActivityHtml(projectCwd, state);
+  return htmlPage("Activity", bodyHtml, "/activity", extraHead, state, projectCwd);
 }
 
 // ─── Route: Logs ──────────────────────────────────────────────────────────────
@@ -2228,8 +2305,9 @@ function routeApiStatus(cwd: string): Response {
 
 // ─── Route: GET /api/activity-data ───────────────────────────────────────────
 
-function routeApiActivityData(cwd: string): Response {
-  const projectCwd = loadProjectCwd(cwd);
+function routeApiActivityData(cwd: string, req: Request): Response {
+  const urlCwd = new URL(req.url).searchParams.get("cwd");
+  const projectCwd = resolveViewCwd(cwd, urlCwd);
   const state = loadState(projectCwd);
   const actContent = readFileSafe(activityPath(projectCwd));
   const planContent = readFileSafe(planPath(projectCwd));
@@ -2409,13 +2487,13 @@ export async function startDashboard(port: number, openBrowser: boolean, cwd: st
         return html(routeLaunchGet(cwd, flash));
       }
       if (path === "/status")             return html(routeStatus(cwd));
-      if (path === "/plan")               return html(routePlan(cwd));
-      if (path === "/activity")           return html(routeActivity(cwd));
+      if (path === "/plan")               return html(routePlan(cwd, q.get("cwd")));
+      if (path === "/activity")           return html(routeActivity(cwd, q.get("cwd")));
       if (path === "/logs")               return html(routeLogs(cwd));
       if (path === "/readme")             return html(routeReadme(cwd));
       if (path === "/console")            return html(routeConsole(cwd));
       if (path === "/api/console-log")    return routeApiConsoleLog(cwd);
-      if (path === "/api/activity-data")  return routeApiActivityData(cwd);
+      if (path === "/api/activity-data")  return routeApiActivityData(cwd, req);
       if (path === "/intervene") {
         if (req.method === "POST") return routeIntervenePost(req, cwd);
         let flash: { type: string; message: string } | undefined;
