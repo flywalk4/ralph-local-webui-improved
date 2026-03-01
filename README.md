@@ -4,7 +4,8 @@
 </p>
 
 <p align="center">
-  <img src="screenshot.webp" alt="Open Ralph Wiggum - Iterative AI coding loop for Claude Code and Codex" />
+ 
+<img src="screenshots/dashboard-launch.png" alt="Dashboard Launch page" width="100%">
 </p>
 
 <p align="center">
