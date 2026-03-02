@@ -2983,19 +2983,29 @@ function resolveOpencodeBackend(modelFromForm: string): OpencodeBackend | null {
   try { cfg = JSON.parse(readFileSync(cfgPath, "utf-8")); } catch { return null; }
 
   const providers = cfg.provider as Record<string, any> | undefined;
-  if (!providers || typeof providers !== "object") return null;
 
   let targetProvKey: string | undefined;
   let targetModelId: string = modelFromForm;
 
-  // "providerKey/modelId" → resolve that provider directly
+  // 1. Explicit "providerKey/modelId" from the form
   if (modelFromForm.includes("/")) {
     const slash = modelFromForm.indexOf("/");
     targetProvKey = modelFromForm.slice(0, slash);
     targetModelId = modelFromForm.slice(slash + 1);
   }
 
-  if (targetProvKey) {
+  // 2. No explicit provider — read opencode's top-level `model` field (e.g. "anthropic/claude-sonnet-4-5")
+  if (!targetProvKey && !modelFromForm) {
+    const defaultModel = cfg.model as string | undefined;
+    if (defaultModel?.includes("/")) {
+      const slash = defaultModel.indexOf("/");
+      targetProvKey = defaultModel.slice(0, slash);
+      targetModelId = defaultModel.slice(slash + 1);
+    }
+  }
+
+  // 3. Resolve the target provider directly
+  if (targetProvKey && providers && typeof providers === "object") {
     const prov = providers[targetProvKey];
     if (prov) {
       const baseURL = prov?.options?.baseURL as string | undefined;
@@ -3007,16 +3017,9 @@ function resolveOpencodeBackend(modelFromForm: string): OpencodeBackend | null {
     }
   }
 
-  // Scan for local (baseURL) providers first
-  for (const [, prov] of Object.entries(providers)) {
-    const baseURL = (prov as any)?.options?.baseURL as string | undefined;
-    if (!baseURL) continue;
-    const models = (prov as any)?.models as Record<string, any> | undefined;
-    const model = targetModelId || (models ? Object.keys(models)[0] : "") || "";
-    if (model) return { type: "openai-compat", baseUrl: baseURL.replace(/\/+$/, ""), model };
-  }
+  if (!providers || typeof providers !== "object") return null;
 
-  // Fall back to Anthropic provider in config
+  // 4. Fallback: prefer Anthropic over local providers (cloud is more likely to be available)
   const anthropicProv = providers.anthropic;
   if (anthropicProv) {
     const apiKey = anthropicProv?.apiKey ?? anthropicProv?.options?.apiKey ?? process.env.ANTHROPIC_API_KEY;
@@ -3025,6 +3028,15 @@ function resolveOpencodeBackend(modelFromForm: string): OpencodeBackend | null {
       const model = targetModelId || (models ? Object.keys(models)[0] : "") || "claude-haiku-4-5-20251001";
       return { type: "anthropic", apiKey, model };
     }
+  }
+
+  // 5. Local/custom providers last
+  for (const [, prov] of Object.entries(providers)) {
+    const baseURL = (prov as any)?.options?.baseURL as string | undefined;
+    if (!baseURL) continue;
+    const models = (prov as any)?.models as Record<string, any> | undefined;
+    const model = targetModelId || (models ? Object.keys(models)[0] : "") || "";
+    if (model) return { type: "openai-compat", baseUrl: baseURL.replace(/\/+$/, ""), model };
   }
 
   return null;
