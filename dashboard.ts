@@ -2958,6 +2958,81 @@ async function routeApiProjectInfo(req: Request): Promise<Response> {
 
 // ─── Route: POST /api/enrich-prompt ──────────────────────────────────────────
 
+/** Strip ANSI escape codes from a string. */
+function stripAnsiCodes(str: string): string {
+  return str.replace(/\x1b\[[0-9;]*[mGKHFABCDEF]/g, "").replace(/\x1b\][^\x07]*\x07/g, "");
+}
+
+/** Resolve the opencode binary name (handles Windows .cmd wrapper). */
+function resolveOpencodeBinary(): string {
+  const override = process.env.RALPH_OPENCODE_BINARY;
+  if (override) return override;
+  if (process.platform === "win32") {
+    if (!Bun.which("opencode") && Bun.which("opencode.cmd")) return "opencode.cmd";
+  }
+  return "opencode";
+}
+
+/**
+ * Run opencode CLI for a single-turn enrichment.
+ * We prepend instructions to NOT use any file tools so opencode stays pure-text.
+ */
+async function callOpencodeCliEnrich(systemPrompt: string, userPrompt: string, model: string, projectCwd: string): Promise<string> {
+  const binary = resolveOpencodeBinary();
+
+  // Combine into one prompt. Lead with a hard instruction to avoid file tools.
+  const fullPrompt = `${systemPrompt}
+
+⚠️ TOOL USE RESTRICTION: This is a text-only task. You MUST NOT use any file tools, write or read any files, execute commands, or make any changes to the codebase. Output ONLY the enriched task specification text — nothing else.
+
+TASK TO ENRICH:
+${userPrompt}`;
+
+  const args = ["run"];
+  if (model) args.push("-m", model);
+  args.push(fullPrompt);
+
+  const proc = Bun.spawn([binary, ...args], {
+    cwd: projectCwd,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+  });
+  proc.stdin.end();
+
+  // Collect stdout with 120s timeout
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  const reader = proc.stdout.getReader();
+  const cancel = new Promise<void>(r => setTimeout(r, 120_000));
+  await Promise.race([
+    (async () => {
+      try { while (true) { const { value, done } = await reader.read(); if (done) break; if (value) chunks.push(decoder.decode(value, { stream: true })); } } catch {}
+    })(),
+    cancel,
+  ]);
+  reader.cancel().catch(() => {});
+  await proc.exited;
+
+  const raw = stripAnsiCodes(chunks.join(""));
+
+  // Extract model text — filter out opencode's UI chrome (tool call boxes, spinners, etc.)
+  const lines = raw.split("\n");
+  const kept: string[] = [];
+  for (const line of lines) {
+    const t = line.trimEnd();
+    if (/^\s*[|│]/.test(t)) continue;                            // tool call boxes
+    if (/[┌┐└┘├┤┬┴─╭╮╰╯]/.test(t)) continue;                   // box-drawing chars
+    if (/^[\s✓✗⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●○◆▲▼]\s/.test(t)) continue;         // spinners / bullets
+    if (/^\s*(Tool|Running|Thinking|Calling|Reading|Writing|Searching)\b/i.test(t)) continue;
+    if (/^\s*>\s/.test(t) && t.length < 80) continue;            // short quoted lines (UI)
+    kept.push(t);
+  }
+
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** Path to opencode's user config — same logic as ralph.ts OPENCODE_USER_CONFIG_PATH. */
 function opencodeConfigPath(): string {
   return join(
@@ -3083,73 +3158,8 @@ function buildEnrichmentContext(projectCwd: string): string {
   return parts.join("\n");
 }
 
-async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Response> {
-  let body: { prompt?: string; baseUrl?: string; model?: string; agent?: string } = {};
-  try { body = await req.json(); } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: { "Content-Type": "application/json" } });
-  }
-
-  const rawPrompt = String(body.prompt ?? "").trim();
-  if (!rawPrompt) {
-    return new Response(JSON.stringify({ error: "prompt is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
-  }
-
-  const baseUrl  = String(body.baseUrl ?? "").trim().replace(/\/+$/, "");
-  const agent    = String(body.agent  ?? "").trim();
-  const modelRaw = String(body.model  ?? "").trim();
-
-  // ── Resolve which backend to use ─────────────────────────────────────────
-  // Priority:
-  //   1. base-url in form                              → OpenAI-compatible
-  //   2. agent=opencode → read opencode config         → OpenAI-compatible (Ollama etc.)
-  //   3. agent=claude-code or model starts with claude → Anthropic API
-  //   4. ANTHROPIC_API_KEY available                   → Anthropic API
-  //   5. OPENAI_API_KEY available                      → OpenAI API
-  //   6. error
-
-  let resolvedBaseUrl = baseUrl;
-  let resolvedModel   = modelRaw;
-  let resolvedAnthropicKey: string | undefined; // extracted from opencode config
-
-  // "" means default which is opencode
-  const effectiveAgent = agent || "opencode";
-
-  if (!resolvedBaseUrl && effectiveAgent === "opencode") {
-    const ocResolved = resolveOpencodeBackend(modelRaw);
-    if (ocResolved) {
-      if (ocResolved.type === "openai-compat") {
-        resolvedBaseUrl = ocResolved.baseUrl;
-        resolvedModel   = ocResolved.model;
-      } else {
-        resolvedAnthropicKey = ocResolved.apiKey;
-        if (!resolvedModel) resolvedModel = ocResolved.model;
-      }
-    }
-  }
-
-  const isClaudeBased = agent === "claude-code" || resolvedModel.toLowerCase().includes("claude");
-  const effectiveAnthropicKey = resolvedAnthropicKey ?? process.env.ANTHROPIC_API_KEY;
-
-  const useAnthropicKey =
-    !resolvedBaseUrl &&
-    !!effectiveAnthropicKey &&
-    (isClaudeBased || !!resolvedAnthropicKey || !process.env.OPENAI_API_KEY);
-
-  const useOpenAICompat = !!resolvedBaseUrl || (!useAnthropicKey && !!process.env.OPENAI_API_KEY);
-
-  if (!useAnthropicKey && !useOpenAICompat) {
-    const hint = effectiveAgent === "opencode"
-      ? "Could not resolve enrichment backend. Configure a provider in opencode.json, or set ANTHROPIC_API_KEY / OPENAI_API_KEY."
-      : "Enter a Base URL (e.g. http://localhost:11434/v1), or set ANTHROPIC_API_KEY / OPENAI_API_KEY.";
-    return new Response(JSON.stringify({ error: hint }), {
-      status: 400, headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const projectCwd = loadCurrentProject(serverCwd);
-  const context = buildEnrichmentContext(projectCwd);
-
-  const systemPrompt = `You are an expert software engineer. Your ONLY job is to expand a rough task description into a detailed, self-contained specification for an autonomous AI coding agent.
+function buildEnrichSystemPrompt(context: string): string {
+  return `You are an expert software engineer. Your ONLY job is to expand a rough task description into a detailed, self-contained specification for an autonomous AI coding agent.
 
 PROJECT CONTEXT (use to infer specifics — do NOT copy verbatim into output):
 ${context}
@@ -3172,6 +3182,95 @@ REQUIRED CONTENT (cover all of these, in any order):
 • Explicit assumptions made where the original description was vague
 
 Write as a single cohesive block of paragraphs — no markdown headers, no bullet points in the output itself. Be specific, verbose, and leave zero ambiguity for the agent.`;
+}
+
+async function routeApiEnrichPrompt(req: Request, serverCwd: string): Promise<Response> {
+  let body: { prompt?: string; baseUrl?: string; model?: string; agent?: string } = {};
+  try { body = await req.json(); } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }
+
+  const rawPrompt = String(body.prompt ?? "").trim();
+  if (!rawPrompt) {
+    return new Response(JSON.stringify({ error: "prompt is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }
+
+  const baseUrl  = String(body.baseUrl ?? "").trim().replace(/\/+$/, "");
+  const agent    = String(body.agent  ?? "").trim();
+  const modelRaw = String(body.model  ?? "").trim();
+
+  // ── Resolve which backend to use ─────────────────────────────────────────
+  // Priority:
+  //   1. base-url in form                              → OpenAI-compatible
+  //   2. agent=opencode (default), no base-url         → opencode CLI (uses free models)
+  //   3. agent=claude-code or model starts with claude → Anthropic API key
+  //   4. ANTHROPIC_API_KEY available                   → Anthropic API
+  //   5. OPENAI_API_KEY available                      → OpenAI API
+  //   6. error
+
+  const effectiveAgent = agent || "opencode";
+
+  // ── Path 1: explicit base-url in form ──────────────────────────────────
+  if (baseUrl) {
+    // handled below in the try block
+  }
+  // ── Path 2: opencode CLI (free models, no API key required) ────────────
+  else if (effectiveAgent === "opencode") {
+    const projectCwd = loadCurrentProject(serverCwd);
+    const context = buildEnrichmentContext(projectCwd);
+    const systemPrompt2 = buildEnrichSystemPrompt(context);
+    try {
+      const enriched = await callOpencodeCliEnrich(systemPrompt2, rawPrompt, modelRaw, projectCwd);
+      if (enriched && enriched.length > 80) {
+        return new Response(JSON.stringify({ prompt: enriched }), { headers: { "Content-Type": "application/json" } });
+      }
+      // Too short — fall through to API-based methods
+    } catch (cliErr: any) {
+      const msg = String(cliErr?.message ?? cliErr);
+      // If binary not found, give a clear message
+      if (msg.includes("not found") || msg.includes("ENOENT") || msg.includes("No such file")) {
+        return new Response(JSON.stringify({ error: "opencode CLI not found. Install it or set RALPH_OPENCODE_BINARY, or provide a Base URL / API key." }), {
+          status: 400, headers: { "Content-Type": "application/json" },
+        });
+      }
+      // Other error — fall through to API-based methods
+    }
+  }
+
+  let resolvedBaseUrl = baseUrl;
+  let resolvedModel   = modelRaw;
+  let resolvedAnthropicKey: string | undefined;
+
+  if (!resolvedBaseUrl && effectiveAgent !== "opencode") {
+    const ocResolved = resolveOpencodeBackend(modelRaw);
+    if (ocResolved) {
+      if (ocResolved.type === "openai-compat") { resolvedBaseUrl = ocResolved.baseUrl; resolvedModel = ocResolved.model; }
+      else { resolvedAnthropicKey = ocResolved.apiKey; if (!resolvedModel) resolvedModel = ocResolved.model; }
+    }
+  }
+
+  const isClaudeBased = agent === "claude-code" || resolvedModel.toLowerCase().includes("claude");
+  const effectiveAnthropicKey = resolvedAnthropicKey ?? process.env.ANTHROPIC_API_KEY;
+
+  const useAnthropicKey =
+    !resolvedBaseUrl &&
+    !!effectiveAnthropicKey &&
+    (isClaudeBased || !!resolvedAnthropicKey || !process.env.OPENAI_API_KEY);
+
+  const useOpenAICompat = !!resolvedBaseUrl || (!useAnthropicKey && !!process.env.OPENAI_API_KEY);
+
+  if (!useAnthropicKey && !useOpenAICompat) {
+    const hint = effectiveAgent === "opencode"
+      ? "opencode CLI enrichment returned no output. Set ANTHROPIC_API_KEY / OPENAI_API_KEY or provide a Base URL as fallback."
+      : "Enter a Base URL (e.g. http://localhost:11434/v1), or set ANTHROPIC_API_KEY / OPENAI_API_KEY.";
+    return new Response(JSON.stringify({ error: hint }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const projectCwd = loadCurrentProject(serverCwd);
+  const context = buildEnrichmentContext(projectCwd);
+  const systemPrompt = buildEnrichSystemPrompt(context);
 
 
 
