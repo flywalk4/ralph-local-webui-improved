@@ -260,8 +260,9 @@ function loadCurrentProject(serverCwd: string): string {
 async function launchRalph(formData: URLSearchParams, serverCwd: string): Promise<string | null> {
   const prompt = formData.get("prompt")?.trim() ?? "";
   const improvingChecked = formData.get("improving") === "on";
-  // Prompt is optional when --improving is set (ralph starts in improvement cycle 1)
-  if (!prompt && !improvingChecked) return "Prompt is required";
+  const testingChecked = formData.get("testing") === "on";
+  // Prompt is optional when --improving or --testing is set
+  if (!prompt && !improvingChecked && !testingChecked) return "Prompt is required";
 
   // Use process.execPath (absolute path to the current bun binary) so
   // Bun.spawn can find it without relying on PATH, which is not inherited
@@ -296,6 +297,7 @@ async function launchRalph(formData: URLSearchParams, serverCwd: string): Promis
     args.push("--improving");
     if (cycles && /^\d+$/.test(cycles)) args.push(cycles);
   }
+  addBool("--testing", "testing");
   addBool("--no-commit", "no-commit");
   addBool("--allow-all", "allow-all");
   addBool("--no-plugins", "no-plugins");
@@ -1054,6 +1056,8 @@ const GLOBAL_CSS = `
   .badge-blue   { background: var(--accent-dim); color: var(--accent); }
   .badge-red    { background: var(--danger-dim); color: var(--danger); }
   .badge-yellow { background: var(--warning-dim); color: var(--warning); }
+  .badge-orange { background: rgba(251,146,60,.15); color: #fb923c; }
+  .badge-purple { background: rgba(167,139,250,.15); color: #a78bfa; }
 
   /* ── Code & Pre ──────────────────────────────────────────────── */
   code {
@@ -1842,6 +1846,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
             min="1" placeholder="unlimited"
             style="width:100%;padding:5px 8px;font-size:12px;background:var(--bg);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text);outline:none">
         </div>
+        ${tog("testing", "--testing", "Test &amp; auto-fix bugs after completion", "void 0")}
         ${tog("optimize", "--optimize", "Minimal prompt for weak models", "void 0", "optimize-cb")}
         ${tog("diff", "--diff", "Inject git diff each iteration", "void 0")}
       </div>
@@ -2067,6 +2072,10 @@ function routeStatus(cwd: string): string {
         ${state!.tasksMode ? rowOf("Tasks mode", '<span class="badge badge-blue">ON</span>') : ""}
         ${state!.improvingMode ? rowOf("Improving mode",
           `<span class="badge badge-blue">Cycle ${state!.improvingCycle ?? 0}${state!.improvingMax ? ` / ${state!.improvingMax}` : " (unlimited)"}</span>`) : ""}
+        ${state!.testingMode ? rowOf("Testing mode",
+          `<span class="badge badge-${state!.testingPhase === "fixing" ? "orange" : "purple"}">
+            ${state!.testingPhase === "fixing" ? "🔧 Fixing" : "🔍 Testing"} · round ${state!.testingCycle ?? 1}${state!.testingMax ? ` / ${state!.testingMax}` : ""}
+          </span>`) : ""}
         ${rowOf("Prompt", escapeHtml(String(state!.prompt ?? "").substring(0, 160)) + (String(state!.prompt ?? "").length > 160 ? "…" : ""))}
       </div>`;
   }

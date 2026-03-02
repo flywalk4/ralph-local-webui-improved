@@ -37,6 +37,7 @@ const historyPath = join(stateDir, "ralph-history.json");
 const tasksPath = join(stateDir, "ralph-tasks.md");
 const questionsPath = join(stateDir, "ralph-questions.json");
 const stopFlagPath = join(stateDir, "STOP");
+const bugsPath = join(stateDir, "ralph-bugs.md");
 
 // Agent configuration from file or built-in
 let customConfigPath = "";
@@ -472,6 +473,14 @@ Arguments:
                         ralph --improving 5 --plan
                       Combined with initial task:
                         ralph "build a todo app" --plan --improving 5
+  --testing [N]       Testing Mode — after the task (and any improving cycles) are done,
+                      the agent tests the project, writes bugs to .ralph/ralph-bugs.md,
+                      then ralph fixes them and re-tests until no bugs remain.
+                      N = max test+fix rounds (default: unlimited).
+                      Omit the prompt to test an existing project immediately:
+                        ralph --testing
+                      Combined with initial task:
+                        ralph "build a todo app" --testing 3
   --optimize          Optimize for small/weak models: strips git diagnosis, plan sections,
                       and verbose instructions — sends a minimal focused prompt instead
   --diff              Inject git diff of the previous iteration into every prompt so the
@@ -1146,6 +1155,8 @@ let maxPromptTokens = 0;
 let presetName = "";
 let improvingMode = false;
 let improvingMax = 0; // 0 = unlimited cycles
+let testingMode = false;
+let testingMax = 0;
 
 const promptParts: string[] = [];
 let extraAgentFlags: string[] = [];
@@ -1293,6 +1304,13 @@ for (let i = 0; i < args.length; i++) {
       improvingMax = parseInt(next);
       i++;
     }
+  } else if (arg === "--testing") {
+    testingMode = true;
+    const next = args[i + 1];
+    if (next && !next.startsWith("-") && /^\d+$/.test(next)) {
+      testingMax = parseInt(next);
+      i++;
+    }
   } else if (arg === "--optimize") {
     optimize = true;
   } else if (arg === "--diff") {
@@ -1429,6 +1447,10 @@ if (!prompt) {
   } else if (improvingMode) {
     // Improving-only mode: no initial task — start directly in improvement cycle 1
     prompt = buildImprovingPrompt(1, improvingMax, planMode);
+  } else if (testingMode && !improvingMode) {
+    // Testing-only: start directly in testing phase
+    prompt = buildTestingPrompt(1);
+    completionPromise = "TESTING_COMPLETE";
   } else {
     console.error("Error: No prompt provided");
     console.error("Usage: ralph \"Your task description\" [options]");
@@ -1467,6 +1489,10 @@ interface RalphState {
   improvingMode?: boolean;   // run improvement cycles after completion
   improvingMax?: number;     // 0 = unlimited
   improvingCycle?: number;   // current cycle number (0 = initial task)
+  testingMode?: boolean;
+  testingCycle?: number;     // current round (1, 2, …)
+  testingPhase?: "testing" | "fixing";
+  testingMax?: number;       // 0 = unlimited
 }
 
 // Create or update state
@@ -1956,6 +1982,60 @@ Review the current state of the entire project and choose the SINGLE MOST VALUAB
 
 Pick ONE focused area.${planInstruction}
 Implement the improvement thoroughly, then output COMPLETE when done.`;
+}
+
+function buildTestingPrompt(cycle: number): string {
+  return `
+# Ralph Wiggum — Testing Cycle ${cycle}
+
+Your job is to thoroughly test this project and document any bugs.
+
+## Steps
+1. Run all available tests (bun test / npm test / pytest / etc.)
+2. Try to build / compile the project
+3. Attempt to run the application and exercise main functionality
+4. Inspect code for broken imports, missing files, runtime errors
+5. Look for logic errors, unhandled edge cases, security issues
+
+## Output
+Write ALL findings to \`.ralph/ralph-bugs.md\` using this format:
+\`\`\`
+## Bug 1: [Short title]
+**Severity**: Critical / High / Medium / Low
+**Description**: …
+**File / Location**: …
+**How to reproduce**: …
+\`\`\`
+
+If **no bugs** are found, write this single line to \`.ralph/ralph-bugs.md\`:
+NO_BUGS_FOUND
+
+When done, output:
+<promise>TESTING_COMPLETE</promise>
+`.trim();
+}
+
+function buildFixingPrompt(): string {
+  return `
+# Ralph Wiggum — Bug Fix Cycle
+
+Fix every bug listed in \`.ralph/ralph-bugs.md\`.
+
+## Steps
+1. Read \`.ralph/ralph-bugs.md\` carefully
+2. Fix each bug one by one
+3. After fixing a bug, prepend [FIXED] to its heading in the file
+4. Run tests to confirm fixes work
+
+When ALL bugs are fixed, output:
+<promise>FIXES_COMPLETE</promise>
+`.trim();
+}
+
+function hasBugsRemaining(): boolean {
+  if (!existsSync(bugsPath)) return false;
+  const content = readFileSync(bugsPath, "utf-8").trim();
+  return content.length > 0 && !content.startsWith("NO_BUGS_FOUND");
 }
 
 function buildPrompt(state: RalphState, _agent: AgentConfig, gitIssues: string[] = [], gitDiff = "", consecutiveNoChanges = 0): string {
@@ -2633,6 +2713,10 @@ async function runRalphLoop(): Promise<void> {
     // improving-only (no initial task): start at cycle 1 so the first
     // completion triggers cycle 2, not a redundant "cycle 0" exit
     improvingCycle: improvingMode ? (promptParts.length || promptFile ? 0 : 1) : undefined,
+    testingMode: testingMode || undefined,
+    testingMax: testingMode ? testingMax : undefined,
+    testingCycle: testingMode ? 1 : undefined,
+    testingPhase: testingMode ? "testing" : undefined,
   };
 
   if (!resuming) {
@@ -2687,6 +2771,10 @@ async function runRalphLoop(): Promise<void> {
     const cycleLabel = improvingMax > 0 ? `${improvingMax} improvement cycle${improvingMax !== 1 ? "s" : ""}` : "unlimited improvement cycles";
     console.log(`Improving mode: ENABLED (${cycleLabel} after completion)`);
   }
+  if (testingMode) {
+    const label = testingMax > 0 ? `${testingMax} round(s) max` : "unlimited rounds";
+    console.log(`Testing mode: ENABLED (${label})`);
+  }
   console.log("");
   console.log("Starting loop... (Ctrl+C to stop)");
   console.log("═".repeat(68));
@@ -2734,6 +2822,9 @@ async function runRalphLoop(): Promise<void> {
       clearPendingQuestions();
       break;
     }
+
+    // Sync completion promise from state (may change between testing phases)
+    completionPromise = state.completionPromise;
 
     // Check max iterations
     if (maxIterations > 0 && state.iteration > maxIterations) {
@@ -3094,6 +3185,81 @@ async function runRalphLoop(): Promise<void> {
             saveState(state);
             consecutiveNoChanges = 0;
             // Don't break — continue the while loop into the new cycle
+          } else if (state.testingMode) {
+            if (state.testingPhase === "fixing") {
+              // Fixing agent just completed → start next verification round
+              const nextCycle = (state.testingCycle ?? 1) + 1;
+              const maxCycles = state.testingMax ?? 0;
+              if (maxCycles > 0 && nextCycle > maxCycles) {
+                console.log(`\n🏁 Testing: max cycles (${maxCycles}) reached.`);
+                clearState();
+                clearHistory();
+                clearContext();
+                clearPendingQuestions();
+                break;
+              }
+              console.log(`\n🔍 Verification round ${nextCycle}...`);
+              state.testingCycle = nextCycle;
+              state.testingPhase = "testing";
+              state.completionPromise = "TESTING_COMPLETE";
+              state.prompt = buildTestingPrompt(nextCycle);
+              state.iteration = 0;
+              clearHistory();
+              history.iterations = [];
+              history.totalDurationMs = 0;
+              history.struggleIndicators = { repeatedErrors: {}, noProgressIterations: 0, shortIterations: 0 };
+              clearContext();
+              clearPendingQuestions();
+              saveState(state);
+              consecutiveNoChanges = 0;
+              // continue loop
+            } else if (completionPromise === "TESTING_COMPLETE") {
+              // Testing agent just ran — inspect the bugs file
+              if (hasBugsRemaining()) {
+                console.log(`\n🐛 Bugs found — starting fix cycle ${state.testingCycle}...`);
+                state.testingPhase = "fixing";
+                state.completionPromise = "FIXES_COMPLETE";
+                state.prompt = buildFixingPrompt();
+                state.iteration = 0;
+                clearHistory();
+                history.iterations = [];
+                history.totalDurationMs = 0;
+                history.struggleIndicators = { repeatedErrors: {}, noProgressIterations: 0, shortIterations: 0 };
+                clearContext();
+                clearPendingQuestions();
+                saveState(state);
+                consecutiveNoChanges = 0;
+                // continue loop
+              } else {
+                console.log(`\n✅ No bugs found — testing complete after ${state.testingCycle} round(s).`);
+                if (state.improvingMode) {
+                  const done = state.improvingCycle ?? 0;
+                  console.log(`\n🏁 All ${done} improvement cycle${done !== 1 ? "s" : ""} complete.`);
+                }
+                clearState();
+                clearHistory();
+                clearContext();
+                clearPendingQuestions();
+                break;
+              }
+            } else {
+              // Transitioning from main task (or improving) into first testing round
+              console.log(`\n🔍 Starting testing cycle 1...`);
+              console.log("═".repeat(68));
+              state.testingPhase = "testing";
+              state.completionPromise = "TESTING_COMPLETE";
+              state.prompt = buildTestingPrompt(state.testingCycle ?? 1);
+              state.iteration = 0;
+              clearHistory();
+              history.iterations = [];
+              history.totalDurationMs = 0;
+              history.struggleIndicators = { repeatedErrors: {}, noProgressIterations: 0, shortIterations: 0 };
+              clearContext();
+              clearPendingQuestions();
+              saveState(state);
+              consecutiveNoChanges = 0;
+              // continue loop
+            }
           } else {
             if (state.improvingMode) {
               const done = state.improvingCycle ?? 0;

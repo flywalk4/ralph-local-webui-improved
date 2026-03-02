@@ -28,6 +28,7 @@
   <a href="#commands--options">Commands</a> •
   <a href="#web-dashboard">Dashboard</a> •
   <a href="#plan-mode">Plan Mode</a> •
+  <a href="#testing-mode">Testing Mode</a> •
   <a href="#presets">Presets</a>
 </p>
 
@@ -35,6 +36,84 @@ Quick run
 ```bash
 ralph dashboard --open
 ```
+
+---
+
+## Why Ralph?
+
+Most AI coding tools answer one question, make one edit, then stop. Ralph doesn't stop.
+
+It runs your agent in a loop — the same prompt, over and over — until the task is genuinely done. The agent sees its own previous work in the files and git history, so each pass it self-corrects, fills gaps, and gets closer to the goal without you babysitting it.
+
+**What makes this one different:**
+
+- **Works with every major agent** — Claude Code, Codex, Copilot CLI, OpenCode, Aider, or any local model via `--base-url`. One tool, any backend.
+- **Web dashboard included** — launch loops, monitor progress, inject hints, and stop runs from the browser. No terminal required after the first command.
+- **Full automation pipeline** — build → improve → test, all unattended. See below.
+- **Built-in safety rails** — git self-diagnosis catches stale TODOs and failed commits; stuck detection fires after 3 no-change iterations; `--min-iterations` prevents premature exits; stop button works from any page.
+- **Prompt enrichment** — one click expands a rough task description into a detailed spec using your configured LLM, so even a vague idea becomes a well-scoped prompt.
+- **Lightweight** — a single TypeScript file, runs with Bun, no Docker, no database, no config required to get started.
+
+### Plan Mode — the agent keeps itself on track
+
+Without a plan, a long-running agent tends to drift: it forgets what it was doing, repeats work, or declares victory too early.
+
+`--plan` fixes this by giving the agent two files it owns and maintains:
+
+- **`IMPLEMENTATION_PLAN.md`** — a structured checklist the agent writes on the first iteration and updates as it works. Every subsequent iteration it reads this file back, sees what's done and what isn't, and picks up exactly where it left off.
+- **`activity.md`** — a running log of what happened each iteration. The agent appends an entry before and after making changes, so you can follow progress without reading code.
+
+```bash
+ralph "Build a full-stack app with auth and a dashboard" --plan --max-iterations 50
+```
+
+The plan survives crashes and restarts — ralph resumes from the same state file. When combined with `--improving`, each improvement cycle archives the old plan as `IMPLEMENTATION_PLAN.cycle{N}.md` and starts a fresh one, so the agent always has a clean slate for the new focus.
+
+### Improving Mode — keeps going after "done"
+
+The task is complete. Most tools stop here. Ralph doesn't have to.
+
+`--improving [N]` starts autonomous improvement cycles after the initial task finishes. Each cycle the agent surveys the whole project and picks the single most valuable thing to work on — no human input needed:
+
+- 🏗 Architecture — better abstractions, remove duplication
+- ⚡ Performance — speed up slow paths, cut memory usage
+- 🎨 UX — polish the interface, improve feedback, fix rough edges
+- ✅ Reliability — add tests, harden error handling, cover edge cases
+- 🔒 Security — validate inputs, fix vulnerabilities, audit dependencies
+- ✨ Features — whatever adds the most value next
+
+```bash
+# Build, then run 5 improvement passes
+ralph "Build a REST API" --plan --improving 5
+
+# Improve an existing project right now — no task needed
+ralph --improving 3 --plan
+
+# Unlimited passes until you hit Ctrl+C
+ralph "Create a CLI tool" --improving
+```
+
+### Testing Mode — automated QA loop
+
+Even after the task is done and improved, there may still be bugs. `--testing` runs a self-testing → bug-fix cycle until the project is clean:
+
+1. **Test round** — the agent runs your test suite, tries to build, exercises the app, and writes any bugs it finds to `.ralph/ralph-bugs.md`.
+2. **Fix round** — if bugs were found, the agent reads the file, fixes each one, marks it `[FIXED]`, and re-runs tests.
+3. **Verify** — ralph runs another test round to confirm everything is clean.
+4. Repeat until the agent writes `NO_BUGS_FOUND`.
+
+```bash
+# Test & fix after a task
+ralph "Build a REST API" --testing
+
+# Test an existing project right now
+ralph --testing
+
+# The full unattended pipeline: build → improve → test & fix
+ralph "Build a todo app" --plan --improving 3 --testing
+```
+
+The three modes compose cleanly. Ralph runs them in order — main task, then improving cycles, then testing — so you can kick off a single command and come back to a finished, polished, tested project.
 
 ---
 
@@ -85,6 +164,7 @@ done
 - **⏹ Stop Loop** — Stop the running loop instantly from the sidebar button (visible on every page) or from the Status page, without touching the terminal
 - **Plan Mode** — `--plan` keeps `IMPLEMENTATION_PLAN.md` and `activity.md` in sync across iterations
 - **Improving Mode** — `--improving [N]` keeps running after the task is done; each cycle ralph autonomously picks the most valuable improvement (design, performance, tests, security, features, etc.) and implements it. Works on existing projects too: `ralph --improving 5`
+- **Testing Mode** — `--testing [N]` runs a self-testing → bug-fix loop after the project is complete. The agent tests the project, writes bugs to `.ralph/ralph-bugs.md`, ralph fixes them, and repeats until no bugs remain. Standalone (`ralph --testing`) or combined with improving (`--improving 3 --testing`)
 - **Task Tracking** — `--tasks` mode breaks complex projects into a managed checklist
 - **Presets** — `--preset NAME` loads saved prompt/config combos from `presets.json`
 - **Local Model Support** — built-in `llm` agent + `--base-url` for any OpenAI-compatible API; `--optimize` and `--max-prompt-tokens` tune the prompt for small models; Ollama model list auto-detected when `--model` is omitted
@@ -164,6 +244,15 @@ ralph "Build a REST API" --plan --improving 5
 # Improve an existing project (no initial task needed)
 ralph --improving 3 --plan
 
+# Build, then test & auto-fix bugs until clean
+ralph "Build a REST API" --testing
+
+# Test an existing project right now (no task needed)
+ralph --testing
+
+# Full pipeline: build → improve 3× → test & fix
+ralph "Build a todo app" --plan --improving 3 --testing
+
 # Load a saved preset
 ralph --preset my_api_task
 
@@ -212,6 +301,7 @@ ralph dashboard [--port N] [--open]
 | `--diff` | Inject `git diff HEAD~1` into every prompt so the agent can see exactly what it changed in the previous iteration |
 | `--max-prompt-tokens N` | Truncate the prompt to ~N tokens. Keeps the task (start) and completion signal (end); removes middle sections |
 | `--improving [N]` | Improving Mode — see below |
+| `--testing [N]` | Testing Mode — see below |
 
 ### Improving Mode
 
@@ -243,6 +333,8 @@ ralph --improving 2
 With `--plan`, each cycle archives the previous `IMPLEMENTATION_PLAN.md` as `IMPLEMENTATION_PLAN.cycle{N}.md` and creates a fresh plan for the new improvement focus.
 
 **Dashboard:** The Launch form has an `--improving` checkbox and an optional cycle count field. The Status and Activity pages show the current cycle number as a `🔧 Cycle N / M` badge.
+
+See the [Testing Mode](#testing-mode) section below for full details.
 
 ### Multi-Agent Rotation
 
@@ -369,7 +461,7 @@ Every CLI option is available as a form control:
 - **Agent & Model** — dropdown for all 6 agent types, model text input, Base URL field with **↓ Models** button that fetches available models directly from Ollama (or any OpenAI-compatible endpoint)
 - **Rotation** — cycle through agent:model pairs each iteration
 - **Iteration control** — max/min iterations, completion signal, abort signal, max prompt tokens
-- **Modes** — `--plan`, `--tasks`, `--optimize`, `--diff` checkboxes
+- **Modes** — `--plan`, `--tasks`, `--improving` (with optional cycle count), `--testing`, `--optimize`, `--diff` checkboxes
 - **Options** — `--allow-all`, `--no-commit`, `--no-plugins`, `--no-stream`, `--verbose-tools`, `--no-questions`
 - **Advanced** — preset name, project directory (with **📁 Browse** file explorer modal)
 - **Stop Loop** — a red **⏹ Stop Loop** button appears in the warning banner when a loop is already running
@@ -382,7 +474,8 @@ Shows the active loop state with live polling (auto-refreshes every 5 seconds wh
 
 - Current iteration, agent, model, base URL
 - Elapsed time, started timestamp, completion signal
-- Plan mode / tasks mode indicators
+- Plan mode / tasks mode / improving mode indicators
+- Testing mode badge: `🔍 Testing · round N` (purple) while testing, `🔧 Fixing · round N / M` (orange) while fixing bugs
 - **⏹ Stop Loop** button to terminate the running process (also available in the sidebar on every page)
 - Per-iteration history: duration, completion ✓/✗, tools used
 
@@ -406,6 +499,54 @@ Inject a plain-text context note that gets prepended to the next iteration's pro
 | `/activity` | Parsed iteration timeline with task progress tracking, auto-updates every 3s when active |
 | `/console` | Raw agent output log (last 200 lines), auto-updates every 2s when active |
 | `/readme` | Full documentation rendered from the installed `README.md` |
+
+---
+
+## Testing Mode
+
+`--testing [N]` runs a self-testing → bug-fix loop after the project is complete (and after any `--improving` cycles). The agent tests the project, documents bugs in `.ralph/ralph-bugs.md`, then ralph fixes them and re-tests — repeating until no bugs remain.
+
+```bash
+# Test & auto-fix after a task
+ralph "Build a REST API" --testing
+
+# Limit to 3 test+fix rounds max
+ralph "Build a REST API" --testing 3
+
+# Test an existing project immediately (no task needed)
+ralph --testing
+
+# Full pipeline: build → 2 improvement cycles → test & fix
+ralph "Build a todo app" --plan --improving 2 --testing
+```
+
+**Execution order when combined:** main task → improving cycles → testing cycles
+
+### How a testing cycle works
+
+1. **🔍 Test round** — agent runs tests (`bun test` / `npm test` / `pytest` / etc.), tries to build, exercises main functionality, and inspects code for errors. Findings go into `.ralph/ralph-bugs.md`.
+
+2. **🐛 Bugs found?**
+   - **Yes** → **🔧 Fix round** — agent reads the bug file, fixes each issue, marks them `[FIXED]`, and confirms fixes with tests. Then ralph starts the next verification round.
+   - **No** (`NO_BUGS_FOUND` written) → loop exits cleanly. ✅
+
+**Bug file format** (`.ralph/ralph-bugs.md`):
+
+```markdown
+## Bug 1: Login endpoint returns 500 on missing password
+**Severity**: High
+**Description**: POST /auth/login crashes when `password` field is absent
+**File / Location**: src/routes/auth.ts:42
+**How to reproduce**: curl -X POST /auth/login -d '{"email":"a@b.com"}'
+```
+
+**Dashboard:** The `--testing` toggle is in the Modes panel on the Launch page. The Status page shows:
+- `🔍 Testing · round N` (purple badge) while the test agent is running
+- `🔧 Fixing · round N / M` (orange badge) while the fix agent is running
+
+<img src="screenshots/dashboard-status-testing.png" alt="Status page — Testing phase (purple badge)" width="100%">
+
+<img src="screenshots/dashboard-status-fixing.png" alt="Status page — Fixing phase (orange badge)" width="100%">
 
 ---
 
@@ -756,6 +897,7 @@ ralph-wiggum/
 | `ralph-history.json` | Iteration history and metrics |
 | `ralph-context.md` | Pending context note for next iteration |
 | `ralph-tasks.md` | Task checklist (created by `--tasks` mode) |
+| `ralph-bugs.md` | Bug report written by the agent in `--testing` mode |
 | `presets.json` | Saved prompt/config presets |
 
 ### Plan Mode Files (in project root)
@@ -824,6 +966,7 @@ Install Bun: https://bun.sh
 - Greenfield projects where you can walk away
 - Iterative refinement (getting a test suite to pass)
 - Long-running projects tracked with `--plan` or `--tasks`
+- Post-build quality assurance with `--testing` (especially combined with `--improving`)
 
 **Not good for:**
 - Tasks requiring human judgment at each step
