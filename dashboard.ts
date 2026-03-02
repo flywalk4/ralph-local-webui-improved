@@ -22,6 +22,7 @@ function planPath(cwd: string): string { return join(cwd, "IMPLEMENTATION_PLAN.m
 function activityPath(cwd: string): string { return join(cwd, "activity.md"); }
 function pidPath(cwd: string): string { return join(stateDir(cwd), "dashboard-pid.json"); }
 function logPath(cwd: string): string { return join(stateDir(cwd), "ralph-output.log"); }
+function stopFlagPath(cwd: string): string { return join(stateDir(cwd), "STOP"); }
 
 // ─── Data loaders ─────────────────────────────────────────────────────────────
 
@@ -340,6 +341,12 @@ async function stopRalph(cwd: string): Promise<boolean> {
   // launched from the dashboard (PID file exists) or from the CLI (no PID file).
   const projectCwd = loadCurrentProject(cwd);
 
+  // Write a STOP flag file so ralph exits gracefully at the next iteration boundary
+  try {
+    mkdirSync(stateDir(projectCwd), { recursive: true });
+    writeFileSync(stopFlagPath(projectCwd), "");
+  } catch { /* non-fatal */ }
+
   const pidFile = pidPath(cwd);
   if (existsSync(pidFile)) {
     let pid: number | null = null;
@@ -351,10 +358,11 @@ async function stopRalph(cwd: string): Promise<boolean> {
     if (pid) {
       try {
         if (process.platform === "win32") {
-          Bun.spawn(["taskkill", "/PID", String(pid), "/F", "/T"], {
-            stdout: "ignore",
-            stderr: "ignore",
-          });
+          const killProc = Bun.spawn(
+            ["C:\\Windows\\System32\\taskkill.exe", "/PID", String(pid), "/F", "/T"],
+            { stdout: "ignore", stderr: "ignore" },
+          );
+          await killProc.exited;
         } else {
           process.kill(pid, "SIGTERM");
         }
@@ -1774,7 +1782,8 @@ function htmlPage(
 // ─── Route: Launch ────────────────────────────────────────────────────────────
 
 function routeLaunchGet(cwd: string, flash?: { type: string; message: string }): string {
-  const state = loadState(cwd);
+  const projectCwd = loadCurrentProject(cwd);
+  const state = loadState(projectCwd);
   const isActive = state?.active === true;
 
   const agentWarning = isActive
@@ -1812,6 +1821,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
 
   return htmlPage("Launch", `
     <form method="POST" action="/launch" id="launch-form">
+    <input type="hidden" name="cwd" id="form-cwd" value="${escapeHtml(projectCwd)}">
     <div class="launch-wrap">
 
       <!-- Header -->
@@ -1944,7 +1954,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
 
     <script>
       document.body.classList.add('page-launch');
-      const initialCwd = ${JSON.stringify(loadCurrentProject(cwd))};
+      const initialCwd = ${JSON.stringify(projectCwd)};
       const IS_WINDOWS = ${JSON.stringify(process.platform === "win32")};
 
       function updateImprovingCycles() {

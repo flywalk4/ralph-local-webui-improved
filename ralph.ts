@@ -36,6 +36,7 @@ const contextPath = join(stateDir, "ralph-context.md");
 const historyPath = join(stateDir, "ralph-history.json");
 const tasksPath = join(stateDir, "ralph-tasks.md");
 const questionsPath = join(stateDir, "ralph-questions.json");
+const stopFlagPath = join(stateDir, "STOP");
 
 // Agent configuration from file or built-in
 let customConfigPath = "";
@@ -2695,13 +2696,13 @@ async function runRalphLoop(): Promise<void> {
 
   // Set up signal handler for graceful shutdown
   let stopping = false;
-  process.on("SIGINT", () => {
+  const handleStop = (signal: string) => {
     if (stopping) {
       console.log("\nForce stopping...");
       process.exit(1);
     }
     stopping = true;
-    console.log("\nGracefully stopping Ralph loop...");
+    console.log(`\nGracefully stopping Ralph loop (${signal})...`);
 
     // Kill the subprocess if it's running
     if (currentProc) {
@@ -2712,14 +2713,28 @@ async function runRalphLoop(): Promise<void> {
       }
     }
 
+    // Clean up stop flag if present
+    try { if (existsSync(stopFlagPath)) unlinkSync(stopFlagPath); } catch {}
+
     clearState();
     clearPendingQuestions();
     console.log("Loop cancelled.");
     process.exit(0);
-  });
+  };
+  process.on("SIGINT", () => handleStop("SIGINT"));
+  process.on("SIGTERM", () => handleStop("SIGTERM"));
 
   // Main loop
   while (true) {
+    // Check for dashboard stop request (written by dashboard Stop button)
+    if (existsSync(stopFlagPath)) {
+      try { unlinkSync(stopFlagPath); } catch {}
+      console.log("\n⏹ Stop requested by dashboard.");
+      clearState();
+      clearPendingQuestions();
+      break;
+    }
+
     // Check max iterations
     if (maxIterations > 0 && state.iteration > maxIterations) {
       console.log(`\n╔══════════════════════════════════════════════════════════════════╗`);
