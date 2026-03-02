@@ -771,6 +771,132 @@ const GLOBAL_CSS = `
   body.sidebar-collapsed .sidebar-stop-wrap { display: none !important; }
   body.sidebar-collapsed .sidebar-toggle { transform: scaleX(-1); }
 
+  /* ── Launch page ─────────────────────────────────────────────── */
+  .launch-wrap {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 80px);
+    gap: 0;
+  }
+  .launch-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0 12px;
+    flex-shrink: 0;
+  }
+  .launch-title { font-size: 18px; font-weight: 600; color: var(--text); }
+  .launch-prompt-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 8px;
+    transition: border-color 0.15s;
+  }
+  .launch-prompt-wrap:focus-within { border-color: rgba(255,255,255,0.18); }
+  .launch-prompt-wrap textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    resize: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.6;
+    outline: none;
+    width: 100%;
+    min-height: 0;
+  }
+  .launch-prompt-wrap textarea::placeholder { color: var(--text-muted); }
+  .launch-prompt-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Accordions */
+  .acc-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; flex-shrink: 0; }
+  .acc-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .acc-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px; cursor: pointer; user-select: none;
+    font-size: 13px; font-weight: 500; color: var(--text-muted);
+    transition: background 0.12s, color 0.12s; gap: 10px;
+  }
+  .acc-header:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .acc-header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .acc-chevron { font-size: 10px; transition: transform 0.22s ease; opacity: 0.5; flex-shrink: 0; }
+  .acc-item.open .acc-chevron { transform: rotate(180deg); }
+  .acc-item.open .acc-header { color: var(--text); }
+  .acc-body { max-height: 0; overflow: hidden; transition: max-height 0.28s ease; }
+  .acc-item.open .acc-body { max-height: 500px; }
+  .acc-body-inner { padding: 2px 14px 12px; }
+
+  /* Summary tags in collapsed accordions */
+  .acc-summary { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
+  .acc-tag {
+    font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    background: var(--accent-dim); color: var(--accent);
+    font-family: var(--font-mono); white-space: nowrap;
+  }
+
+  /* Toggle switches (OpenAI-style) */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 0; border-bottom: 1px solid var(--border-sub); gap: 16px; cursor: pointer;
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-row label { cursor: pointer; }
+  .toggle-info { flex: 1; min-width: 0; }
+  .toggle-name { font-size: 13px; font-weight: 500; color: var(--text); font-family: var(--font-mono); }
+  .toggle-desc { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .tog {
+    position: relative; width: 36px; height: 20px; flex-shrink: 0; display: inline-block;
+  }
+  .tog input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .tog-track {
+    position: absolute; inset: 0; background: var(--surface-3);
+    border-radius: 10px; transition: background 0.2s; cursor: pointer;
+  }
+  .tog-track::after {
+    content: ''; position: absolute;
+    width: 14px; height: 14px; background: white; border-radius: 50%;
+    top: 3px; left: 3px; transition: transform 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  }
+  .tog input:checked + .tog-track { background: var(--accent); }
+  .tog input:checked + .tog-track::after { transform: translateX(16px); }
+
+  /* Compact form rows inside accordions */
+  .acc-form-row { display: flex; gap: 8px; }
+  .acc-form-row + .acc-form-row { margin-top: 8px; }
+  .acc-form-row .fg { flex: 1; }
+  .acc-form-row .fg label { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; display: block; font-weight: 500; }
+  .acc-form-row .fg input,
+  .acc-form-row .fg select {
+    width: 100%; padding: 6px 10px; font-size: 13px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text); outline: none; font-family: inherit;
+  }
+  .acc-form-row .fg input:focus,
+  .acc-form-row .fg select:focus { border-color: rgba(255,255,255,0.2); }
+  .acc-form-row .fg .input-row { display: flex; gap: 4px; }
+  .acc-form-row .fg .input-row input { flex: 1; }
+
+  /* Launch submit row */
+  .launch-submit { display: flex; gap: 8px; align-items: center; flex-shrink: 0; padding-bottom: 2px; }
+  .launch-submit .btn-primary { flex: 1; padding: 10px; font-size: 14px; font-weight: 600; justify-content: center; }
+
   /* ── Typography ──────────────────────────────────────────────── */
   h1 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
   h2 { font-size: 15px; font-weight: 600; color: var(--text); margin: 24px 0 10px;
@@ -1531,241 +1657,225 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
     ? `<div class="alert alert-${flash.type}">${escapeHtml(flash.message)}</div>`
     : "";
 
+  const tog = (name: string, label: string, desc: string, onchange: string, id = "") =>
+    `<label class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-name">${label}</div>
+        <div class="toggle-desc">${desc}</div>
+      </div>
+      <span class="tog"><input type="checkbox" name="${name}"${id ? ` id="${id}"` : ""} onchange="${onchange}"><span class="tog-track"></span></span>
+    </label>`;
+
+  const togChecked = (name: string, label: string, desc: string, onchange: string) =>
+    `<label class="toggle-row">
+      <div class="toggle-info">
+        <div class="toggle-name">${label}</div>
+        <div class="toggle-desc">${desc}</div>
+      </div>
+      <span class="tog"><input type="checkbox" name="${name}" checked onchange="${onchange}"><span class="tog-track"></span></span>
+    </label>`;
+
   return htmlPage("Launch", `
-    <div class="page-header">
-      <h1>⚡ Launch Ralph</h1>
-      <p class="page-subtitle">Start a new agentic loop with your chosen configuration.</p>
-    </div>
-    ${flashHtml}
-    ${agentWarning}
-
     <form method="POST" action="/launch" id="launch-form">
+    <div class="launch-wrap">
 
-      <!-- PROMPT -->
-      <div class="form-section">
-        <div class="form-section-title">✏ Prompt</div>
-        <div class="form-group">
-          <label for="prompt" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            Task description
-            <span class="required" id="prompt-required">*</span>
-            <span id="prompt-optional" style="display:none;font-size:11px;color:var(--text-muted);font-weight:400">(optional with --improving)</span>
-            <button type="button" id="enrich-btn" class="btn btn-ghost btn-sm" style="margin-left:auto"
-              onclick="enrichPrompt()" title="Enrich prompt using the selected model + project context">✨ Enrich</button>
-          </label>
-          <textarea name="prompt" id="prompt" rows="6"
-            placeholder="e.g. Fix the failing tests in tests/auth.test.ts and make sure all assertions pass"></textarea>
-          <div id="enrich-status" style="display:none;font-size:11px;margin-top:4px"></div>
+      <!-- Header -->
+      <div class="launch-header">
+        <div class="launch-title">⚡ Launch Ralph</div>
+      </div>
+      ${flashHtml}${agentWarning}
+
+      <!-- Prompt -->
+      <div class="launch-prompt-wrap">
+        <textarea name="prompt" id="prompt"
+          placeholder="Describe the task for Ralph to complete…" spellcheck="false"></textarea>
+        <div class="launch-prompt-footer">
+          <span id="prompt-optional" style="display:none;font-size:11px;color:var(--text-muted)">(optional with --improving)</span>
+          <span id="enrich-status" style="display:none;font-size:11px"></span>
+          <button type="button" id="enrich-btn" class="btn btn-ghost btn-sm"
+            onclick="enrichPrompt()" title="Enrich prompt using the selected model">✨ Enrich</button>
         </div>
       </div>
 
-      <!-- AGENT & MODEL -->
-      <div class="form-section">
-        <div class="form-section-title">🤖 Agent &amp; Model</div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="agent">Agent</label>
-            <select name="agent" id="agent">
-              <option value="">Default (opencode)</option>
-              <option value="opencode">opencode</option>
-              <option value="claude-code">claude-code</option>
-              <option value="codex">codex</option>
-              <option value="copilot">copilot</option>
-              <option value="aider">aider</option>
-              <option value="llm">llm (built-in)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="model">Model</label>
-            <input type="text" name="model" id="model"
-              placeholder="e.g. claude-sonnet-4-6, qwen2.5-coder:32b"
-              list="model-suggestions" autocomplete="off">
-            <datalist id="model-suggestions"></datalist>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="base-url">Base URL <span style="font-size:11px;font-weight:400;color:var(--text-muted)">(OpenAI-compatible, e.g. Ollama)</span></label>
-            <div class="input-row">
-              <input type="text" name="base-url" id="base-url"
-                placeholder="http://localhost:11434/v1">
-              <button type="button" class="btn btn-ghost btn-sm" id="fetch-models-btn"
-                onclick="fetchModels()" title="Fetch available models from the endpoint">↓ Models</button>
+      <!-- Accordions -->
+      <div class="acc-list">
+
+        <!-- Agent & Model -->
+        <div class="acc-item" id="acc-agent">
+          <div class="acc-header" onclick="accToggle('acc-agent')">
+            <div class="acc-header-left">
+              <span>🤖 Agent &amp; Model</span>
+              <div class="acc-summary" id="summary-agent"></div>
             </div>
+            <span class="acc-chevron">▼</span>
           </div>
-          <div class="form-group">
-            <label for="rotation">Rotation <span style="font-size:11px;font-weight:400;color:var(--text-muted)">(cycle agents per iteration)</span></label>
-            <input type="text" name="rotation" id="rotation"
-              placeholder="opencode:claude-sonnet-4,claude-code:gpt-4o">
-          </div>
-        </div>
-      </div>
-
-      <!-- ITERATION CONTROL -->
-      <div class="form-section">
-        <div class="form-section-title">🔁 Iteration Control</div>
-        <div class="form-row triple">
-          <div class="form-group">
-            <label for="max-iterations">Max iterations</label>
-            <input type="number" name="max-iterations" id="max-iterations"
-              min="1" placeholder="unlimited">
-          </div>
-          <div class="form-group">
-            <label for="min-iterations">Min iterations</label>
-            <input type="number" name="min-iterations" id="min-iterations"
-              min="1" placeholder="1">
-          </div>
-          <div class="form-group">
-            <label for="max-prompt-tokens">Max prompt tokens</label>
-            <input type="number" name="max-prompt-tokens" id="max-prompt-tokens"
-              min="100" placeholder="unlimited">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="completion-promise">Completion signal</label>
-            <input type="text" name="completion-promise" id="completion-promise"
-              placeholder="COMPLETE">
-          </div>
-          <div class="form-group">
-            <label for="abort-promise">Abort signal</label>
-            <input type="text" name="abort-promise" id="abort-promise"
-              placeholder="GIVE_UP (optional)">
-          </div>
-        </div>
-      </div>
-
-      <!-- MODES -->
-      <div class="form-section">
-        <div class="form-section-title">🎛 Modes</div>
-        <div class="checkbox-grid">
-          <label class="checkbox-label">
-            <input type="checkbox" name="plan">
-            <span class="cb-text">
-              <span class="cb-name">--plan</span>
-              <span class="cb-desc">Maintain IMPLEMENTATION_PLAN.md</span>
-            </span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="tasks">
-            <span class="cb-text">
-              <span class="cb-name">--tasks</span>
-              <span class="cb-desc">Work through ralph-tasks.md checklist</span>
-            </span>
-          </label>
-          <label class="checkbox-label" id="optimize-label">
-            <input type="checkbox" name="optimize" id="optimize-cb">
-            <span class="cb-text">
-              <span class="cb-name">--optimize</span>
-              <span class="cb-desc">Minimal prompt for small/weak models</span>
-            </span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="diff">
-            <span class="cb-text">
-              <span class="cb-name">--diff</span>
-              <span class="cb-desc">Inject git diff into each iteration</span>
-            </span>
-          </label>
-        </div>
-        <!-- Improving mode row -->
-        <div class="form-row" style="margin-top:12px;align-items:flex-end">
-          <div class="form-group" style="flex:0 0 auto">
-            <label class="checkbox-label" style="margin:0">
-              <input type="checkbox" name="improving" id="improving-cb"
-                onchange="document.getElementById('improving-cycles').disabled=!this.checked;document.getElementById('prompt-required').style.display=this.checked?'none':'';document.getElementById('prompt-optional').style.display=this.checked?'':'none'">
-              <span class="cb-text">
-                <span class="cb-name">--improving</span>
-                <span class="cb-desc">Keep running after completion — ralph autonomously
-                  picks and implements improvements (design, performance, tests, features, etc.)</span>
-              </span>
-            </label>
-          </div>
-          <div class="form-group" style="flex:0 0 140px">
-            <label for="improving-cycles">Improvement cycles</label>
-            <input type="number" name="improving-cycles" id="improving-cycles"
-              min="1" placeholder="unlimited" disabled>
-          </div>
-        </div>
-      </div>
-
-      <!-- OPTIONS -->
-      <div class="form-section">
-        <div class="form-section-title">⚙ Options</div>
-        <div class="checkbox-grid">
-          <label class="checkbox-label">
-            <input type="checkbox" name="allow-all" checked>
-            <span class="cb-text">
-              <span class="cb-name">--allow-all</span>
-              <span class="cb-desc">Auto-approve all permissions</span>
-            </span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="no-commit">
-            <span class="cb-text">
-              <span class="cb-name">--no-commit</span>
-              <span class="cb-desc">Skip auto-commit after each iteration</span>
-            </span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="no-plugins">
-            <span class="cb-text">
-              <span class="cb-name">--no-plugins</span>
-              <span class="cb-desc">Disable OpenCode plugins</span>
-            </span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="no-stream">
-            <span class="cb-text">
-              <span class="cb-name">--no-stream</span>
-              <span class="cb-desc">Buffer output, print at end</span>
-            </span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="verbose-tools">
-            <span class="cb-text">
-              <span class="cb-name">--verbose-tools</span>
-              <span class="cb-desc">Print every tool call in detail</span>
-            </span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="no-questions">
-            <span class="cb-text">
-              <span class="cb-name">--no-questions</span>
-              <span class="cb-desc">Disable interactive questions</span>
-            </span>
-          </label>
-        </div>
-      </div>
-
-      <!-- ADVANCED -->
-      <div class="form-section">
-        <div class="form-section-title">🔧 Advanced</div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="preset">Preset name</label>
-            <input type="text" name="preset" id="preset"
-              placeholder="Load from .ralph/presets.json">
-          </div>
-          <div class="form-group">
-            <label for="cwd">Project directory</label>
-            <div class="input-row">
-              <input type="text" name="cwd" id="cwd"
-                value="${escapeHtml(loadCurrentProject(cwd))}"
-                placeholder="${escapeHtml(cwd)}">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="openDirModal()"
-                title="Browse for a directory">📁 Browse</button>
+          <div class="acc-body"><div class="acc-body-inner">
+            <div class="acc-form-row">
+              <div class="fg">
+                <label>Agent</label>
+                <select name="agent" id="agent" onchange="updateAllSummaries();updateOptimize()">
+                  <option value="">Default (opencode)</option>
+                  <option value="opencode">opencode</option>
+                  <option value="claude-code">claude-code</option>
+                  <option value="codex">codex</option>
+                  <option value="copilot">copilot</option>
+                  <option value="aider">aider</option>
+                  <option value="llm">llm (built-in)</option>
+                </select>
+              </div>
+              <div class="fg">
+                <label>Model</label>
+                <input type="text" name="model" id="model"
+                  placeholder="e.g. claude-sonnet-4-6" list="model-suggestions" autocomplete="off"
+                  oninput="updateAllSummaries()">
+                <datalist id="model-suggestions"></datalist>
+              </div>
             </div>
-            <div id="project-card" style="display:none" class="project-card"></div>
-          </div>
+            <div class="acc-form-row">
+              <div class="fg">
+                <label>Base URL <span style="opacity:.6">(OpenAI-compatible)</span></label>
+                <div class="input-row">
+                  <input type="text" name="base-url" id="base-url" placeholder="http://localhost:11434/v1">
+                  <button type="button" class="btn btn-ghost btn-sm" id="fetch-models-btn"
+                    onclick="fetchModels()">↓ Models</button>
+                </div>
+              </div>
+              <div class="fg">
+                <label>Rotation <span style="opacity:.6">(cycle per iteration)</span></label>
+                <input type="text" name="rotation" id="rotation"
+                  placeholder="opencode:claude-sonnet-4,claude-code:gpt-4o">
+              </div>
+            </div>
+          </div></div>
         </div>
-      </div>
 
-      <!-- SUBMIT -->
-      <div class="btn-row" style="margin-top:4px">
+        <!-- Iteration Control -->
+        <div class="acc-item" id="acc-iter">
+          <div class="acc-header" onclick="accToggle('acc-iter')">
+            <div class="acc-header-left">
+              <span>🔁 Iteration Control</span>
+              <div class="acc-summary" id="summary-iter"></div>
+            </div>
+            <span class="acc-chevron">▼</span>
+          </div>
+          <div class="acc-body"><div class="acc-body-inner">
+            <div class="acc-form-row">
+              <div class="fg">
+                <label>Max iterations</label>
+                <input type="number" name="max-iterations" id="max-iterations" min="1" placeholder="unlimited"
+                  oninput="updateAllSummaries()">
+              </div>
+              <div class="fg">
+                <label>Min iterations</label>
+                <input type="number" name="min-iterations" id="min-iterations" min="1" placeholder="1"
+                  oninput="updateAllSummaries()">
+              </div>
+              <div class="fg">
+                <label>Max prompt tokens</label>
+                <input type="number" name="max-prompt-tokens" id="max-prompt-tokens" min="100" placeholder="unlimited"
+                  oninput="updateAllSummaries()">
+              </div>
+            </div>
+            <div class="acc-form-row">
+              <div class="fg">
+                <label>Completion signal</label>
+                <input type="text" name="completion-promise" id="completion-promise" placeholder="COMPLETE"
+                  oninput="updateAllSummaries()">
+              </div>
+              <div class="fg">
+                <label>Abort signal</label>
+                <input type="text" name="abort-promise" id="abort-promise" placeholder="GIVE_UP (optional)"
+                  oninput="updateAllSummaries()">
+              </div>
+            </div>
+          </div></div>
+        </div>
+
+        <!-- Modes -->
+        <div class="acc-item" id="acc-modes">
+          <div class="acc-header" onclick="accToggle('acc-modes')">
+            <div class="acc-header-left">
+              <span>🎛 Modes</span>
+              <div class="acc-summary" id="summary-modes"></div>
+            </div>
+            <span class="acc-chevron">▼</span>
+          </div>
+          <div class="acc-body"><div class="acc-body-inner">
+            ${tog('plan', '--plan', 'Maintain IMPLEMENTATION_PLAN.md', 'updateAllSummaries()')}
+            ${tog('tasks', '--tasks', 'Work through ralph-tasks.md checklist', 'updateAllSummaries()')}
+            ${tog('improving', '--improving', 'Keep running after completion, autonomously improve', 'updateAllSummaries();updateImprovingCycles()', 'improving-cb')}
+            <div id="improving-cycles-row" style="display:none;padding:6px 0 2px">
+              <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;font-weight:500">Improvement cycles</label>
+              <input type="number" name="improving-cycles" id="improving-cycles"
+                min="1" placeholder="unlimited"
+                style="width:140px;padding:6px 10px;font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none">
+            </div>
+            <div id="optimize-label">
+              ${tog('optimize', '--optimize', 'Minimal prompt for small/weak models', 'updateAllSummaries()', 'optimize-cb')}
+            </div>
+            ${tog('diff', '--diff', 'Inject git diff into each iteration', 'updateAllSummaries()')}
+          </div></div>
+        </div>
+
+        <!-- Options -->
+        <div class="acc-item" id="acc-opts">
+          <div class="acc-header" onclick="accToggle('acc-opts')">
+            <div class="acc-header-left">
+              <span>⚙ Options</span>
+              <div class="acc-summary" id="summary-opts"></div>
+            </div>
+            <span class="acc-chevron">▼</span>
+          </div>
+          <div class="acc-body"><div class="acc-body-inner">
+            ${togChecked('allow-all', '--allow-all', 'Auto-approve all permissions', 'updateAllSummaries()')}
+            ${tog('no-commit', '--no-commit', 'Skip auto-commit after each iteration', 'updateAllSummaries()')}
+            ${tog('no-plugins', '--no-plugins', 'Disable OpenCode plugins', 'updateAllSummaries()')}
+            ${tog('no-stream', '--no-stream', 'Buffer output, print at end', 'updateAllSummaries()')}
+            ${tog('verbose-tools', '--verbose-tools', 'Print every tool call in detail', 'updateAllSummaries()')}
+            ${tog('no-questions', '--no-questions', 'Disable interactive questions', 'updateAllSummaries()')}
+          </div></div>
+        </div>
+
+        <!-- Advanced -->
+        <div class="acc-item" id="acc-adv">
+          <div class="acc-header" onclick="accToggle('acc-adv')">
+            <div class="acc-header-left">
+              <span>🔧 Advanced</span>
+              <div class="acc-summary" id="summary-adv"></div>
+            </div>
+            <span class="acc-chevron">▼</span>
+          </div>
+          <div class="acc-body"><div class="acc-body-inner">
+            <div class="acc-form-row">
+              <div class="fg">
+                <label>Preset name</label>
+                <input type="text" name="preset" id="preset"
+                  placeholder="Load from .ralph/presets.json" oninput="updateAllSummaries()">
+              </div>
+              <div class="fg">
+                <label>Project directory</label>
+                <div class="input-row">
+                  <input type="text" name="cwd" id="cwd"
+                    value="${escapeHtml(loadCurrentProject(cwd))}"
+                    placeholder="${escapeHtml(cwd)}">
+                  <button type="button" class="btn btn-ghost btn-sm" onclick="openDirModal()"
+                    title="Browse for a directory">📁</button>
+                </div>
+                <div id="project-card" style="display:none;margin-top:8px" class="project-card"></div>
+              </div>
+            </div>
+          </div></div>
+        </div>
+
+      </div><!-- /.acc-list -->
+
+      <!-- Submit -->
+      <div class="launch-submit">
         <button type="submit" class="btn btn-primary btn-launch" id="launch-btn">⚡ Launch Ralph</button>
         <a href="/status" class="btn btn-ghost">View Status</a>
       </div>
 
+    </div><!-- /.launch-wrap -->
     </form>
 
     <!-- Directory browser modal -->
@@ -1787,13 +1897,84 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
     <script>
       const initialCwd = ${JSON.stringify(loadCurrentProject(cwd))};
       let currentBrowsePath = initialCwd;
-
-      // ── Directory browser ─────────────────────────────────────────
       const IS_WINDOWS = ${JSON.stringify(process.platform === "win32")};
 
+      // ── Accordion ─────────────────────────────────────────────
+      function accToggle(id) {
+        document.getElementById(id).classList.toggle('open');
+      }
+
+      // ── Summary tags ────────────────────────────────────────────
+      function tag(t) { return '<span class="acc-tag">' + t + '</span>'; }
+      function updateAllSummaries() {
+        // Agent summary
+        const agentVal = document.getElementById('agent').value;
+        const modelVal = document.getElementById('model').value.trim();
+        const agentTags = [];
+        if (agentVal) agentTags.push(tag(agentVal));
+        if (modelVal) agentTags.push(tag(modelVal.split('/').pop()));
+        const sAgent = document.getElementById('summary-agent');
+        if (sAgent) sAgent.innerHTML = agentTags.join('');
+
+        // Iter summary
+        const maxI = document.getElementById('max-iterations').value;
+        const minI = document.getElementById('min-iterations').value;
+        const iterTags = [];
+        if (maxI) iterTags.push(tag('max:' + maxI));
+        if (minI && minI !== '1') iterTags.push(tag('min:' + minI));
+        const sIter = document.getElementById('summary-iter');
+        if (sIter) sIter.innerHTML = iterTags.join('');
+
+        // Modes summary
+        const modeNames = ['plan','tasks','improving','optimize','diff'];
+        const modeTags = modeNames
+          .filter(n => { const el = document.querySelector('[name="' + n + '"]'); return el && el.checked; })
+          .map(n => tag('--' + n));
+        const sModes = document.getElementById('summary-modes');
+        if (sModes) sModes.innerHTML = modeTags.join('');
+
+        // Opts summary
+        const optNames = ['no-commit','no-plugins','no-stream','verbose-tools','no-questions'];
+        const optTags = optNames
+          .filter(n => { const el = document.querySelector('[name="' + n + '"]'); return el && el.checked; })
+          .map(n => tag('--' + n));
+        const allowAll = document.querySelector('[name="allow-all"]');
+        if (allowAll && !allowAll.checked) optTags.unshift(tag('no --allow-all'));
+        const sOpts = document.getElementById('summary-opts');
+        if (sOpts) sOpts.innerHTML = optTags.join('');
+
+        // Adv summary
+        const presetVal = document.getElementById('preset').value.trim();
+        const sAdv = document.getElementById('summary-adv');
+        if (sAdv) sAdv.innerHTML = presetVal ? tag(presetVal) : '';
+      }
+      updateAllSummaries();
+
+      // Improving cycles toggle
+      function updateImprovingCycles() {
+        const cb = document.getElementById('improving-cb');
+        const row = document.getElementById('improving-cycles-row');
+        if (row) row.style.display = cb && cb.checked ? 'block' : 'none';
+        const opt = document.getElementById('prompt-optional');
+        if (opt) opt.style.display = cb && cb.checked ? 'inline' : 'none';
+      }
+
+      // Optimize toggle
+      const agentSel = document.getElementById('agent');
+      const optimizeLabel = document.getElementById('optimize-label');
+      function updateOptimize() {
+        const v = agentSel.value;
+        const dim = v !== '' && v !== 'llm';
+        if (optimizeLabel) optimizeLabel.style.opacity = dim ? '0.4' : '1';
+        const cb = document.getElementById('optimize-cb');
+        if (cb) cb.disabled = dim;
+      }
+      agentSel.addEventListener('change', updateOptimize);
+      updateOptimize();
+
+      // Directory browser
       async function openDirModal() {
         if (IS_WINDOWS) {
-          // Use native Windows folder picker dialog
           const btn = document.querySelector('[onclick="openDirModal()"]');
           if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
           try {
@@ -1804,22 +1985,18 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
               fetch('/api/set-project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd: data.path }) }).catch(() => {});
               loadProjectInfo(data.path);
             }
-            // if cancelled, do nothing
           } catch (e) {
             alert('Could not open folder picker: ' + e.message);
           } finally {
-            if (btn) { btn.textContent = '📁 Browse'; btn.disabled = false; }
+            if (btn) { btn.textContent = '📁'; btn.disabled = false; }
           }
           return;
         }
-        // Non-Windows fallback: custom modal browser
         const cwdInput = document.getElementById('cwd').value.trim() || initialCwd;
         document.getElementById('dir-modal').classList.add('open');
         browseTo(cwdInput);
       }
-      function closeDirModal() {
-        document.getElementById('dir-modal').classList.remove('open');
-      }
+      function closeDirModal() { document.getElementById('dir-modal').classList.remove('open'); }
       function selectCurrentDir() {
         document.getElementById('cwd').value = currentBrowsePath;
         closeDirModal();
@@ -1851,8 +2028,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
               const item = document.createElement('div');
               item.className = 'dir-item';
               const icon = d.name.startsWith('.') ? '📂' : '📁';
-              item.innerHTML = '<span class="dir-item-icon">' + icon + '</span>'
-                             + '<span class="dir-item-name">' + d.name + '</span>';
+              item.innerHTML = '<span class="dir-item-icon">' + icon + '</span><span class="dir-item-name">' + d.name + '</span>';
               item.ondblclick = () => browseTo(d.path);
               item.onclick = () => {
                 listEl.querySelectorAll('.dir-item').forEach(el => el.style.background = '');
@@ -1863,28 +2039,13 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
               listEl.appendChild(item);
             });
           }
-        } catch (e) {
-          pathEl.textContent = 'Failed to load: ' + e.message;
-        }
+        } catch (e) { pathEl.textContent = 'Failed to load: ' + e.message; }
       }
-      // Close modal on overlay click
       document.getElementById('dir-modal').addEventListener('click', function(e) {
         if (e.target === this) closeDirModal();
       });
 
-      // ── Optimize toggle ───────────────────────────────────────────
-      const agentSel = document.getElementById('agent');
-      const optimizeLabel = document.getElementById('optimize-label');
-      function updateOptimize() {
-        const v = agentSel.value;
-        const dim = v !== '' && v !== 'llm';
-        optimizeLabel.style.opacity = dim ? '0.4' : '1';
-        optimizeLabel.querySelector('input').disabled = dim;
-      }
-      agentSel.addEventListener('change', updateOptimize);
-      updateOptimize();
-
-      // ── Ollama model fetch ────────────────────────────────────────
+      // Ollama model fetch
       async function fetchModels() {
         const url = document.getElementById('base-url').value.trim();
         if (!url) { alert('Enter a Base URL first (e.g. http://localhost:11434/v1)'); return; }
@@ -1906,39 +2067,29 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
         } catch (e) {
           alert('Failed to fetch models: ' + e.message);
           btn.textContent = '↓ Models';
-        } finally {
-          btn.disabled = false;
-        }
+        } finally { btn.disabled = false; }
       }
 
-      // ── Prompt enrichment ─────────────────────────────────────────
+      // Prompt enrichment
       async function enrichPrompt() {
         const btn = document.getElementById('enrich-btn');
         const status = document.getElementById('enrich-status');
         const ta = document.getElementById('prompt');
         const rawPrompt = ta.value.trim();
         if (!rawPrompt) { ta.focus(); return; }
-
         const baseUrl = document.getElementById('base-url').value.trim();
         const model   = document.getElementById('model').value.trim();
-
         btn.disabled = true;
         btn.textContent = '⏳ Enriching…';
-        status.style.display = 'block';
+        status.style.display = 'inline';
         status.style.color = 'var(--text-muted)';
-        status.textContent = 'Sending to LLM… (may take up to 2 min for local models)';
-
+        status.textContent = 'Sending to LLM…';
         try {
           const agent = document.getElementById('agent').value.trim();
           const resp = await fetch('/api/enrich-prompt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt:  rawPrompt,
-              agent:   agent   || undefined,
-              model:   model   || undefined,
-              baseUrl: baseUrl || undefined,
-            }),
+            body: JSON.stringify({ prompt: rawPrompt, agent: agent || undefined, model: model || undefined, baseUrl: baseUrl || undefined }),
           });
           const d = await resp.json();
           if (d.error) {
@@ -1947,28 +2098,26 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
           } else {
             ta.value = d.prompt;
             status.style.color = 'var(--success)';
-            status.textContent = '✓ Prompt enriched';
+            status.textContent = '✓ Enriched';
             setTimeout(() => { status.style.display = 'none'; }, 3000);
           }
         } catch (e) {
           status.style.color = 'var(--danger)';
-          status.textContent = '✗ Request failed: ' + e.message;
+          status.textContent = '✗ ' + e.message;
         } finally {
           btn.disabled = false;
           btn.textContent = '✨ Enrich';
         }
       }
 
-      // ── Warn if loop already running ──────────────────────────────
+      // Warn if loop already running
       document.getElementById('launch-form').addEventListener('submit', function(e) {
         if (document.querySelector('.alert-warning')) {
-          if (!confirm('A loop is already running. Launch another anyway?')) {
-            e.preventDefault();
-          }
+          if (!confirm('A loop is already running. Launch another anyway?')) e.preventDefault();
         }
       });
 
-      // ── Project info card ─────────────────────────────────────────
+      // Project info card
       let _projInfoTimer = null;
       document.getElementById('cwd').addEventListener('input', function() {
         clearTimeout(_projInfoTimer);
@@ -1988,8 +2137,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
           const resp = await fetch('/api/project-info?cwd=' + encodeURIComponent(path));
           const d = await resp.json();
           if (d.error) { card.innerHTML = '<p class="project-card-loading" style="color:var(--text-muted)">⚠ ' + esc(d.error) + '</p>'; return; }
-          let html = '<div class="project-info-header">'
-            + '<span class="project-name">' + esc(d.name) + '</span>';
+          let html = '<div class="project-info-header"><span class="project-name">' + esc(d.name) + '</span>';
           if (d.version) html += '<span class="project-version">v' + esc(d.version) + '</span>';
           if (d.gitBranch) html += '<span class="badge badge-gray" style="font-size:10px">⎇ ' + esc(d.gitBranch) + '</span>';
           if (d.hasPlan)     html += '<span class="badge badge-blue" style="font-size:10px">📋 Plan</span>';
@@ -1998,8 +2146,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
           if (d.description) html += '<p class="project-desc">' + esc(d.description) + '</p>';
           if (d.lastRun) {
             const ago = d.lastRun.startedAt ? timeAgo(new Date(d.lastRun.startedAt)) : '';
-            html += '<div class="project-last-run">'
-              + '<span style="font-size:11px;color:var(--text-muted)">Last run' + (ago ? ' · ' + ago : '') + ':</span>'
+            html += '<div class="project-last-run"><span style="font-size:11px;color:var(--text-muted)">Last run' + (ago ? ' · ' + ago : '') + ':</span>'
               + ' <strong style="font-size:11px">' + esc(d.lastRun.agent || '?') + '</strong>'
               + (d.lastRun.iteration ? ' · <span style="font-size:11px">' + d.lastRun.iteration + ' iterations</span>' : '');
             if (d.lastRun.prompt) {
@@ -2013,17 +2160,13 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
           } else {
             html += '<p class="project-desc" style="margin-top:6px">No previous runs in this directory.</p>';
           }
-          html += '<p style="font-size:11px;color:var(--text-muted);margin-top:8px">📄 Project summary saved to <code>.ralph/project-summary.md</code></p>';
           card.innerHTML = html;
-        } catch (e) {
-          card.style.display = 'none';
-        }
+        } catch (e) { card.style.display = 'none'; }
       }
 
       function resumeLastRun(prompt) {
         document.getElementById('prompt').value = prompt;
         document.getElementById('prompt').focus();
-        document.getElementById('prompt').scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
       function timeAgo(date) {
@@ -2034,15 +2177,14 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
         return Math.floor(s / 86400) + 'd ago';
       }
 
-      function esc(s) {
-        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      }
+      function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
       // Load project info on initial page load
       loadProjectInfo(initialCwd);
     </script>
   `, "/launch", "", state);
 }
+
 
 // ─── Route: Status ────────────────────────────────────────────────────────────
 
