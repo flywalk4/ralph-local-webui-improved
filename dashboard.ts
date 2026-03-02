@@ -336,34 +336,38 @@ async function launchRalph(formData: URLSearchParams, serverCwd: string): Promis
 }
 
 async function stopRalph(cwd: string): Promise<boolean> {
+  // Always resolve the active project directory — works whether ralph was
+  // launched from the dashboard (PID file exists) or from the CLI (no PID file).
+  const projectCwd = loadCurrentProject(cwd);
+
   const pidFile = pidPath(cwd);
-  if (!existsSync(pidFile)) return false;
-  let pid: number | null = null;
-  let projectCwd = cwd;
-  try {
-    const data = JSON.parse(readFileSync(pidFile, "utf-8"));
-    pid = data.pid ?? null;
-    projectCwd = data.projectCwd ?? cwd;
-  } catch { return false; }
-  if (!pid) return false;
+  if (existsSync(pidFile)) {
+    let pid: number | null = null;
+    try {
+      const data = JSON.parse(readFileSync(pidFile, "utf-8"));
+      pid = data.pid ?? null;
+    } catch { /* corrupted PID file — ignore, still kill by name */ }
 
-  try {
-    if (process.platform === "win32") {
-      Bun.spawn(["taskkill", "/PID", String(pid), "/F", "/T"], {
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-    } else {
-      process.kill(pid, "SIGTERM");
+    if (pid) {
+      try {
+        if (process.platform === "win32") {
+          Bun.spawn(["taskkill", "/PID", String(pid), "/F", "/T"], {
+            stdout: "ignore",
+            stderr: "ignore",
+          });
+        } else {
+          process.kill(pid, "SIGTERM");
+        }
+      } catch { /* process may already be dead */ }
     }
-  } catch { /* process may already be dead — still clean up */ }
 
-  if (existsSync(pidFile)) unlinkSync(pidFile);
+    unlinkSync(pidFile);
+  }
+  // If no PID file (ralph launched from CLI), we can't safely kill by process
+  // name without also killing the dashboard. Just mark state inactive below.
 
-  // Mark the project's state file as inactive so /api/status reflects the
-  // stop immediately. A forced kill bypasses ralph.ts's clearState(),
-  // leaving active:true in the file. Use projectCwd (not server cwd) because
-  // that's where ralph writes its state.
+  // ALWAYS mark the project's state file as inactive so /api/status reflects
+  // the stop immediately regardless of how ralph was started.
   const sp = statePath(projectCwd);
   if (existsSync(sp)) {
     try {
