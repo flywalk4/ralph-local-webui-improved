@@ -884,12 +884,13 @@ const GLOBAL_CSS = `
   .acc-form-row .fg label { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; display: block; font-weight: 500; }
   .acc-form-row .fg input,
   .acc-form-row .fg select {
-    width: 100%; padding: 6px 10px; font-size: 13px;
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text); outline: none; font-family: inherit;
+    width: 100%; padding: 7px 11px; font-size: 13px;
+    background: var(--bg); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; color: var(--text); outline: none; font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
   .acc-form-row .fg input:focus,
-  .acc-form-row .fg select:focus { border-color: rgba(255,255,255,0.2); }
+  .acc-form-row .fg select:focus { border-color: rgba(255,255,255,0.25); box-shadow: 0 0 0 2px rgba(16,163,127,0.18); }
   .acc-form-row .fg .input-row { display: flex; gap: 4px; }
   .acc-form-row .fg .input-row input { flex: 1; }
 
@@ -1025,12 +1026,12 @@ const GLOBAL_CSS = `
   input[type="url"],
   select,
   textarea {
-    background: var(--surface-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
     color: var(--text);
     font-size: 13px;
-    padding: 8px 12px;
+    padding: 9px 13px;
     font-family: inherit;
     transition: border-color 0.15s, box-shadow 0.15s;
     width: 100%;
@@ -1041,10 +1042,13 @@ const GLOBAL_CSS = `
   input[type="url"]:focus,
   select:focus,
   textarea:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(86,69,238,0.15);
+    border-color: rgba(255,255,255,0.25);
+    box-shadow: 0 0 0 2px rgba(16,163,127,0.18);
   }
-  input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 0.5; }
+  input:hover:not(:focus),
+  select:hover:not(:focus),
+  textarea:hover:not(:focus) { border-color: rgba(255,255,255,0.18); }
+  input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 0.6; }
   select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238b8b9e'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; cursor: pointer; }
   textarea { min-height: 100px; resize: vertical; font-family: var(--font-mono); line-height: 1.5; }
 
@@ -1059,12 +1063,12 @@ const GLOBAL_CSS = `
     gap: 9px;
     cursor: pointer;
     padding: 8px 12px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--surface-3);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--surface-2);
     transition: border-color 0.15s, background 0.15s;
   }
-  .checkbox-label:hover { border-color: var(--accent); background: rgba(86,69,238,0.06); }
+  .checkbox-label:hover { border-color: rgba(16,163,127,0.4); background: rgba(16,163,127,0.06); }
   .checkbox-label input[type="checkbox"] {
     width: 14px; height: 14px;
     margin-top: 1px;
@@ -1082,23 +1086,25 @@ const GLOBAL_CSS = `
     align-items: center;
     gap: 6px;
     padding: 8px 16px;
-    border-radius: var(--radius-sm);
+    border-radius: 10px;
     font-size: 13px;
     font-weight: 500;
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
     font-family: inherit;
     white-space: nowrap;
     text-decoration: none;
+    letter-spacing: 0.01em;
   }
-  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); text-decoration: none; }
-  .btn-danger  { background: transparent; color: var(--danger); border-color: rgba(239,68,68,0.3); }
-  .btn-danger:hover  { background: var(--danger-dim); text-decoration: none; }
-  .btn-ghost   { background: transparent; color: var(--text-muted); border-color: var(--border); }
-  .btn-ghost:hover   { background: rgba(255,255,255,0.06); color: var(--text); text-decoration: none; }
-  .btn-sm      { padding: 4px 11px; font-size: 12px; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: transparent; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); text-decoration: none; }
+  .btn-danger  { background: transparent; color: var(--danger); border-color: rgba(239,68,68,0.25); }
+  .btn-danger:hover:not(:disabled)  { background: var(--danger-dim); border-color: rgba(239,68,68,0.4); text-decoration: none; }
+  .btn-ghost   { background: transparent; color: var(--text-muted); border-color: rgba(255,255,255,0.1); }
+  .btn-ghost:hover:not(:disabled)   { background: rgba(255,255,255,0.06); color: var(--text); border-color: rgba(255,255,255,0.18); text-decoration: none; }
+  .btn-sm      { padding: 4px 11px; font-size: 12px; border-radius: 8px; }
   .btn-launch  { padding: 11px 28px; font-size: 14px; font-weight: 600; border-radius: 24px; }
 
   .btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -1139,7 +1145,7 @@ const GLOBAL_CSS = `
   .alert-success { background: var(--success-dim); border: 1px solid rgba(52,196,114,0.25); color: var(--success); }
   .alert-error   { background: var(--danger-dim);  border: 1px solid rgba(240,92,92,0.25);  color: var(--danger); }
   .alert-warning { background: var(--warning-dim); border: 1px solid rgba(224,160,32,0.25); color: var(--warning); }
-  .alert-info    { background: var(--accent-dim);  border: 1px solid rgba(86,69,238,0.3);   color: var(--accent); }
+  .alert-info    { background: var(--accent-dim);  border: 1px solid rgba(16,163,127,0.3);  color: var(--accent); }
 
   .tag {
     display: inline-block;
