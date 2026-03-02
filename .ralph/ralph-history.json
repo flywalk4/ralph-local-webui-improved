@@ -1,0 +1,38 @@
+{
+  "iterations": [
+    {
+      "iteration": 1,
+      "startedAt": "2026-03-02T16:35:31.282Z",
+      "endedAt": "2026-03-02T16:35:42.020Z",
+      "durationMs": 10212,
+      "agent": "opencode",
+      "model": "",
+      "toolsUsed": {},
+      "filesModified": [
+        ".ralph/"
+      ],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": []
+    },
+    {
+      "iteration": 2,
+      "startedAt": "2026-03-02T16:35:44.234Z",
+      "endedAt": "2026-03-02T16:35:56.617Z",
+      "durationMs": 11836,
+      "agent": "opencode",
+      "model": "",
+      "toolsUsed": {},
+      "filesModified": [],
+      "exitCode": 0,
+      "completionDetected": false,
+      "errors": []
+    }
+  ],
+  "totalDurationMs": 22048,
+  "struggleIndicators": {
+    "repeatedErrors": {},
+    "noProgressIterations": 1,
+    "shortIterations": 2
+  }
+}

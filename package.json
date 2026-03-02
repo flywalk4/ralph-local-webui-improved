@@ -1,17 +1,22 @@
 {
   "name": "@flywalk4/ralph-wiggum",
   "version": "1.2.3",
-  "description": "Ralph Wiggum technique for iterative AI development loops with multi-agent support",
+  "author": "flywalk4",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flywalk4/open-ralph-wiggum.git"
+  },
   "main": "bin/ralph.js",
+  "devDependencies": {
+    "@types/bun": "^1.3.5"
+  },
   "bin": {
     "ralph": "bin/ralph.js"
   },
-  "scripts": {
-    "start": "bun ralph.ts",
-    "build": "bun build ralph.ts --outfile bin/ralph --compile",
-    "test": "bun test ./tests/ralph.test.ts",
-    "install-local": "bun link"
+  "bugs": {
+    "url": "https://github.com/flywalk4/open-ralph-wiggum/issues"
   },
+  "description": "Ralph Wiggum technique for iterative AI development loops with multi-agent support",
   "files": [
     "bin/ralph.js",
     "ralph.ts",
@@ -26,6 +31,7 @@
     "uninstall.sh",
     "uninstall.ps1"
   ],
+  "homepage": "https://github.com/flywalk4/open-ralph-wiggum#readme",
   "keywords": [
     "opencode",
     "ai",
@@ -46,17 +52,11 @@
     "bun",
     "typescript"
   ],
-  "author": "flywalk4",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/flywalk4/open-ralph-wiggum.git"
-  },
-  "bugs": {
-    "url": "https://github.com/flywalk4/open-ralph-wiggum/issues"
-  },
-  "homepage": "https://github.com/flywalk4/open-ralph-wiggum#readme",
-  "devDependencies": {
-    "@types/bun": "^1.3.5"
+  "scripts": {
+    "start": "bun ralph.ts",
+    "build": "bun build ralph.ts --outfile bin/ralph --compile",
+    "test": "bun test ./tests/ralph.test.ts",
+    "install-local": "bun link"
   }
 }
