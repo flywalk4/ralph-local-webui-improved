@@ -17,6 +17,7 @@
   <a href="https://github.com/flywalk4/open-ralph-wiggum/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://github.com/flywalk4/open-ralph-wiggum"><img src="https://img.shields.io/badge/built%20with-Bun%20%2B%20TypeScript-f472b6.svg" alt="Built with Bun + TypeScript"></a>
   <a href="https://github.com/flywalk4/open-ralph-wiggum/releases"><img src="https://img.shields.io/github/v/release/flywalk4/open-ralph-wiggum?include_prereleases" alt="Release"></a>
+
 </p>
 
 <p align="center">
@@ -29,6 +30,11 @@
   <a href="#plan-mode">Plan Mode</a> •
   <a href="#presets">Presets</a>
 </p>
+
+Quick run
+```bash
+ralph dashboard --open
+```
 
 ---
 
@@ -396,8 +402,9 @@ Inject a plain-text context note that gets prepended to the next iteration's pro
 
 | Route | Description |
 |-------|-------------|
-| `/plan` | Live markdown view of `IMPLEMENTATION_PLAN.md` |
-| `/activity` | Last 120 lines of `activity.md`, auto-reloads every 10s when active |
+| `/plan` | Live markdown view of `IMPLEMENTATION_PLAN.md`, auto-refreshes every 3s when active |
+| `/activity` | Parsed iteration timeline with task progress tracking, auto-updates every 3s when active |
+| `/console` | Raw agent output log (last 200 lines), auto-updates every 2s when active |
 | `/readme` | Full documentation rendered from the installed `README.md` |
 
 ---
@@ -417,8 +424,8 @@ ralph "Build a full-stack app with auth and dashboard" --plan --max-iterations 5
 **On every subsequent iteration**, ralph reads both files and injects them into the prompt. The agent is reminded to update task statuses and append a new activity log entry before and after making changes.
 
 **In the dashboard:**
-- `/plan` renders `IMPLEMENTATION_PLAN.md` with live markdown formatting
-- `/activity` shows the last 100 lines of `activity.md`
+- `/plan` renders `IMPLEMENTATION_PLAN.md` with live markdown formatting, auto-refreshing every 3s
+- `/activity` shows `activity.md` as a parsed iteration timeline with task progress tracking
 
 ---
 
@@ -830,6 +837,7 @@ Install Bun: https://bun.sh
 
 - [Original Ralph Wiggum technique by Geoffrey Huntley](https://ghuntley.com/ralph/)
 - [Ralph Orchestrator](https://github.com/mikeyobrien/ralph-orchestrator)
+- [Was forked from](https://github.com/Th0rgal/open-ralph-wiggum)
 
 ## License
 

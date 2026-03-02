@@ -341,6 +341,9 @@ const BUILT_IN_AGENTS: Record<AgentType, AgentConfig> = {
     buildEnv: ENV_TEMPLATES["opencode"],
     parseToolOutput: PARSE_PATTERNS["opencode"],
     configName: "OpenCode",
+    // OpenCode appends its own status/UI lines after the AI response,
+    // so the promise tag is never the final line. Scan the full output.
+    completionCheck: "anywhere",
   },
   "claude-code": {
     type: "claude-code",
@@ -349,6 +352,11 @@ const BUILT_IN_AGENTS: Record<AgentType, AgentConfig> = {
     buildEnv: ENV_TEMPLATES["default"],
     parseToolOutput: PARSE_PATTERNS["claude-code"],
     configName: "Claude Code",
+    // In stream-json mode the captured stdoutText is raw JSON; the last line
+    // is always the {"type":"result",...} event, not the promise tag.
+    // In plain mode the CLI appends cost/usage lines after the AI response.
+    // Either way, scan the full output instead of checking only the last line.
+    completionCheck: "anywhere",
   },
   "codex": {
     type: "codex",
@@ -3032,11 +3040,18 @@ async function runRalphLoop(): Promise<void> {
               console.log(`📦 Archived plan → ${archiveName}`);
             }
 
-            // Reset iteration for the new cycle; update prompt and cycle counter
-            state.iteration = 1;
+            // Reset iteration for the new cycle; update prompt and cycle counter.
+            // Use 0 here because state.iteration++ runs unconditionally at the
+            // bottom of the loop, so it will become 1 at the start of cycle 1.
+            state.iteration = 0;
             state.improvingCycle = nextCycle;
             state.prompt = buildImprovingPrompt(nextCycle, cycleMax, state.planMode ?? false);
             clearHistory();
+            // Reset in-memory history so old iterations/timers/struggle counts
+            // don't carry over into the new improvement cycle.
+            history.iterations = [];
+            history.totalDurationMs = 0;
+            history.struggleIndicators = { repeatedErrors: {}, noProgressIterations: 0, shortIterations: 0 };
             clearContext();
             clearPendingQuestions();
             saveState(state);
