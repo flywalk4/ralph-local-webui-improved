@@ -791,13 +791,30 @@ const GLOBAL_CSS = `
   }
 
     /* ── Launch page ─────────────────────────────────────────────── */
+  /* Lock scroll on launch page by setting body.page-launch */
+  body.page-launch { overflow: hidden; height: 100vh; }
+  body.page-launch .main {
+    overflow: hidden;
+    padding-bottom: 0;
+    min-height: unset;
+    height: 100vh;
+  }
+  body.page-launch .main-inner {
+    padding-top: 16px;
+    height: calc(100vh - 16px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
   .launch-wrap {
     display: grid;
     grid-template-columns: 176px 1fr 176px;
     grid-template-rows: auto 1fr auto;
     grid-template-areas: "header header header" "modes center options" "submit submit submit";
     gap: 8px;
-    height: calc(100vh - 80px);
+    height: 100%;
+    overflow: hidden;
   }
   .launch-header {
     grid-area: header;
@@ -815,6 +832,7 @@ const GLOBAL_CSS = `
     gap: 6px;
     min-height: 0;
     overflow: hidden;
+    min-width: 0;
   }
   .launch-panel {
     display: flex;
@@ -1916,6 +1934,7 @@ function routeLaunchGet(cwd: string, flash?: { type: string; message: string }):
     </form>
 
     <script>
+      document.body.classList.add('page-launch');
       const initialCwd = ${JSON.stringify(loadCurrentProject(cwd))};
       const IS_WINDOWS = ${JSON.stringify(process.platform === "win32")};
 
