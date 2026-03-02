@@ -504,36 +504,34 @@ function simpleMarkdownToHtml(md: string): string {
 // ─── Global CSS ───────────────────────────────────────────────────────────────
 
 const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap');
-
   :root {
-    --bg:          #18181b;
-    --surface:     #222228;
-    --surface-2:   #2a2a33;
-    --surface-3:   #32323e;
-    --border:      rgba(255,255,255,0.07);
-    --border-sub:  rgba(255,255,255,0.04);
-    --text:        #f4f4f7;
-    --text-muted:  #8b8b9e;
-    --accent:      #5645ee;
-    --accent-hover:#6a5af0;
-    --accent-dim:  rgba(86,69,238,0.18);
-    --success:     #34c472;
-    --success-dim: rgba(52,196,114,0.15);
-    --danger:      #f05c5c;
-    --danger-dim:  rgba(240,92,92,0.15);
-    --warning:     #e0a020;
-    --warning-dim: rgba(224,160,32,0.15);
-    --radius:      14px;
+    --bg:          #212121;
+    --surface:     #171717;
+    --surface-2:   #2f2f2f;
+    --surface-3:   #3a3a3a;
+    --border:      rgba(255,255,255,0.08);
+    --border-sub:  rgba(255,255,255,0.05);
+    --text:        #ececec;
+    --text-muted:  #8e8ea0;
+    --accent:      #10a37f;
+    --accent-hover:#0d8f6f;
+    --accent-dim:  rgba(16,163,127,0.15);
+    --success:     #10a37f;
+    --success-dim: rgba(16,163,127,0.15);
+    --danger:      #ef4444;
+    --danger-dim:  rgba(239,68,68,0.15);
+    --warning:     #f59e0b;
+    --warning-dim: rgba(245,158,11,0.15);
+    --radius:      12px;
     --radius-sm:   8px;
-    --sidebar-w:   220px;
+    --sidebar-w:   260px;
     --font-mono:   'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-family: ui-sans-serif, -apple-system, 'Helvetica Neue', Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.6;
@@ -552,45 +550,66 @@ const GLOBAL_CSS = `
     top: 0; left: 0; bottom: 0;
     width: var(--sidebar-w);
     background: var(--surface);
-    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     z-index: 100;
     overflow-y: auto;
+    padding: 8px;
   }
 
   .sidebar-brand {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 20px 16px;
-    font-weight: 700;
+    padding: 10px 10px 6px;
+    font-weight: 600;
     font-size: 15px;
     color: var(--text);
     flex-shrink: 0;
+    justify-content: space-between;
   }
 
-  .brand-icon { font-size: 20px; }
+  .sidebar-brand-left {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .brand-icon { font-size: 18px; }
   .brand-logo {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
     object-fit: cover;
     object-position: center top;
     flex-shrink: 0;
   }
 
+  .brand-new-btn {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+    text-decoration: none;
+  }
+  .brand-new-btn:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+
   .status-dot {
     width: 7px; height: 7px;
     border-radius: 50%;
     background: var(--surface-3);
-    margin-left: auto;
     flex-shrink: 0;
     transition: background 0.3s, box-shadow 0.3s;
   }
   .status-dot.active {
     background: var(--success);
-    box-shadow: 0 0 8px var(--success);
+    box-shadow: 0 0 6px var(--success);
     animation: pulse-dot 2.5s ease-in-out infinite;
   }
   @keyframes pulse-dot {
@@ -599,56 +618,90 @@ const GLOBAL_CSS = `
   }
 
   .sidebar-nav {
-    padding: 8px 10px;
+    padding: 4px 0;
     flex: 1;
+  }
+
+  .sidebar-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 10px 10px 4px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.6;
   }
 
   .nav-item {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 9px 12px;
+    padding: 8px 10px;
     border-radius: var(--radius-sm);
     color: var(--text-muted);
-    font-size: 13px;
-    font-weight: 500;
-    transition: background 0.15s, color 0.15s;
-    margin-bottom: 2px;
+    font-size: 13.5px;
+    font-weight: 400;
+    transition: background 0.12s, color 0.12s;
+    margin-bottom: 1px;
     cursor: pointer;
   }
-  .nav-item:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
-  .nav-item.active { background: var(--surface-3); color: var(--text); }
-  .nav-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: var(--text); text-decoration: none; }
+  .nav-item.active { background: rgba(255,255,255,0.09); color: var(--text); font-weight: 500; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; opacity: 0.8; }
 
   .sidebar-sep {
     border: none;
     border-top: 1px solid var(--border);
-    margin: 6px 10px;
+    margin: 4px 2px;
   }
 
   .sidebar-footer {
-    padding: 14px 16px;
-    font-size: 11px;
-    color: var(--text-muted);
+    padding: 8px 0 4px;
     flex-shrink: 0;
   }
 
+  /* Stop loop lives in the footer as a nav-style button */
   .sidebar-stop-wrap {
-    padding: 8px 10px 0;
+    padding: 4px 0 0;
     flex-shrink: 0;
   }
   .sidebar-stop-wrap .btn {
     width: 100%;
-    font-size: 12px;
-    padding: 7px 8px;
-    justify-content: center;
+    font-size: 13px;
+    padding: 8px 10px;
+    justify-content: flex-start;
+    border-radius: var(--radius-sm);
+    gap: 10px;
   }
+
+  /* Status indicator row at bottom of sidebar */
+  .sidebar-status-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text-muted);
+    transition: background 0.12s;
+    cursor: default;
+  }
+  .sidebar-status-row:hover { background: rgba(255,255,255,0.06); }
 
   .main {
     margin-left: var(--sidebar-w);
     flex: 1;
-    padding: 32px 36px 60px;
-    max-width: 920px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 0 16px 60px;
+  }
+
+  .main-inner {
+    width: 100%;
+    max-width: 800px;
+    padding: 40px 0 0;
   }
 
   /* ── Typography ──────────────────────────────────────────────── */
@@ -835,10 +888,10 @@ const GLOBAL_CSS = `
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 18px;
+    padding: 8px 16px;
     border-radius: var(--radius-sm);
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     border: 1px solid transparent;
     cursor: pointer;
     transition: all 0.15s;
@@ -848,12 +901,12 @@ const GLOBAL_CSS = `
   }
   .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); text-decoration: none; }
-  .btn-danger  { background: var(--danger-dim); color: var(--danger); border-color: rgba(240,92,92,0.25); }
-  .btn-danger:hover  { background: rgba(240,92,92,0.25); text-decoration: none; }
+  .btn-danger  { background: transparent; color: var(--danger); border-color: rgba(239,68,68,0.3); }
+  .btn-danger:hover  { background: var(--danger-dim); text-decoration: none; }
   .btn-ghost   { background: transparent; color: var(--text-muted); border-color: var(--border); }
-  .btn-ghost:hover   { background: var(--surface-2); color: var(--text); text-decoration: none; }
-  .btn-sm      { padding: 5px 12px; font-size: 12px; }
-  .btn-launch  { padding: 10px 28px; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
+  .btn-ghost:hover   { background: rgba(255,255,255,0.06); color: var(--text); text-decoration: none; }
+  .btn-sm      { padding: 4px 11px; font-size: 12px; }
+  .btn-launch  { padding: 11px 28px; font-size: 14px; font-weight: 600; border-radius: 24px; }
 
   .btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
@@ -1286,7 +1339,8 @@ function htmlPage(
 ): string {
   const isActive = state?.active === true;
   const dotClass = isActive ? "status-dot active" : "status-dot";
-  const dotTitle = isActive ? `Active — iteration ${state?.iteration ?? "?"}` : "No active loop";
+  const dotTitle = isActive ? `Running — iteration ${state?.iteration ?? "?"}` : "No active loop";
+  const iterLabel = isActive ? ` · iter ${state?.iteration ?? "?"}` : "";
 
   const navItem = (href: string, icon: string, label: string) => {
     const cls = activePath === href ? "nav-item active" : "nav-item";
@@ -1310,32 +1364,45 @@ function htmlPage(
 <div class="layout">
   <aside class="sidebar">
     <div class="sidebar-brand">
-      <img src="/logo.png" alt="Ralph" class="brand-logo">
-      <span>Ralph</span>
-      <span class="${dotClass}" id="status-dot" title="${dotTitle}"></span>
+      <div class="sidebar-brand-left">
+        <img src="/logo.png" alt="Ralph" class="brand-logo">
+        <span>Ralph Wiggum</span>
+      </div>
+      <a href="/launch" class="brand-new-btn" title="New launch">✎</a>
     </div>
+
     <nav class="sidebar-nav">
+      <div class="sidebar-section-label">Run</div>
       ${navItem("/launch", "⚡", "Launch")}
       ${navItem("/status", "◉", "Status")}
-      <hr class="sidebar-sep">
+      <div class="sidebar-section-label">Track</div>
       ${navItem("/plan", "📋", "Plan")}
       ${navItem("/activity", "📝", "Activity")}
       ${navItem("/logs", "🗂", "Logs")}
-      <hr class="sidebar-sep">
+      <div class="sidebar-section-label">Tools</div>
       ${navItem("/intervene", "✦", "Intervene")}
       ${navItem("/console", "🖥", "Console")}
       ${navItem("/readme", "📖", "Docs")}
     </nav>
-    <div class="sidebar-stop-wrap" id="sidebar-stop-wrap" style="display:${isActive ? "block" : "none"}">
-      <form method="POST" action="/stop"
-            onsubmit="return confirm('Stop the running Ralph loop?')">
-        <button type="submit" class="btn btn-danger">⏹ Stop Loop</button>
-      </form>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-status-row" id="sidebar-status-row" title="${dotTitle}">
+        <span class="${dotClass}" id="status-dot"></span>
+        <span id="status-label">${isActive ? `Running${iterLabel}` : "Idle"}</span>
+      </div>
+      <div class="sidebar-stop-wrap" id="sidebar-stop-wrap" style="display:${isActive ? "block" : "none"}">
+        <form method="POST" action="/stop"
+              onsubmit="return confirm('Stop the running Ralph loop?')">
+          <button type="submit" class="btn btn-danger">⏹ Stop Loop</button>
+        </form>
+      </div>
     </div>
-    <div class="sidebar-footer">Ralph Wiggum</div>
   </aside>
+
   <main class="main">
-    ${body}
+    <div class="main-inner">
+      ${body}
+    </div>
   </main>
 </div>
 <script>
@@ -1344,10 +1411,11 @@ function htmlPage(
     try {
       const s = await (await fetch('/api/status')).json();
       const dot = document.getElementById('status-dot');
-      if (dot) {
-        dot.className = s.active ? 'status-dot active' : 'status-dot';
-        dot.title = s.active ? 'Active \u2014 iteration ' + (s.iteration ?? '?') : 'No active loop';
-      }
+      const label = document.getElementById('status-label');
+      const row = document.getElementById('sidebar-status-row');
+      if (dot) dot.className = s.active ? 'status-dot active' : 'status-dot';
+      if (label) label.textContent = s.active ? 'Running · iter ' + (s.iteration ?? '?') : 'Idle';
+      if (row) row.title = s.active ? 'Running \u2014 iteration ' + (s.iteration ?? '?') : 'No active loop';
       const wrap = document.getElementById('sidebar-stop-wrap');
       if (wrap) wrap.style.display = s.active ? 'block' : 'none';
     } catch {}
