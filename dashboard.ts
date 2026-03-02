@@ -758,9 +758,9 @@ const GLOBAL_CSS = `
 
   /* Collapsed state overrides */
   body.sidebar-collapsed { --sidebar-w: var(--sidebar-w-collapsed); }
-  body.sidebar-collapsed .sidebar-brand-left { display: none !important; }
+  body.sidebar-collapsed .sidebar-brand-left > span { display: none !important; }
   body.sidebar-collapsed .brand-new-btn { display: none !important; }
-  body.sidebar-collapsed .sidebar-brand { justify-content: center; }
+  body.sidebar-collapsed .sidebar-brand { justify-content: center; flex-direction: column; gap: 4px; align-items: center; }
   body.sidebar-collapsed .sidebar-brand-right { width: 100%; justify-content: center; }
   body.sidebar-collapsed .sidebar-section-label { display: none !important; }
   body.sidebar-collapsed .nav-item > span:last-child { display: none !important; }
