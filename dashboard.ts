@@ -795,25 +795,36 @@ const GLOBAL_CSS = `
   body.page-launch { overflow: hidden; height: 100vh; }
   body.page-launch .main {
     overflow: hidden;
-    padding-bottom: 0;
+    padding: 0;
     min-height: unset;
     height: 100vh;
+    align-items: stretch;
   }
   body.page-launch .main-inner {
-    padding-top: 16px;
-    height: calc(100vh - 16px);
+    width: 100%;
+    max-width: 100%;
+    padding: 12px 20px 12px;
+    height: 100vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
   }
 
+  body.page-launch #launch-form {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .launch-wrap {
     display: grid;
     grid-template-columns: 176px 1fr 176px;
     grid-template-rows: auto 1fr auto;
     grid-template-areas: "header header header" "modes center options" "submit submit submit";
     gap: 8px;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
   .launch-header {
