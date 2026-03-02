@@ -531,14 +531,14 @@ function simpleMarkdownToHtml(md: string): string {
 
 const GLOBAL_CSS = `
   :root {
-    --bg:          #212121;
-    --surface:     #171717;
-    --surface-2:   #2f2f2f;
-    --surface-3:   #3a3a3a;
-    --border:      rgba(255,255,255,0.08);
-    --border-sub:  rgba(255,255,255,0.05);
-    --text:        #ececec;
-    --text-muted:  #8e8ea0;
+    --bg:          #000000;
+    --surface:     #000000;
+    --surface-2:   #111111;
+    --surface-3:   #1a1a1a;
+    --border:      rgba(255,255,255,0.06);
+    --border-sub:  rgba(255,255,255,0.03);
+    --text:        #f0f0f0;
+    --text-muted:  #6b6b7b;
     --accent:      #10a37f;
     --accent-hover:#0d8f6f;
     --accent-dim:  rgba(16,163,127,0.15);
@@ -576,7 +576,7 @@ const GLOBAL_CSS = `
     position: fixed;
     top: 0; left: 0; bottom: 0;
     width: var(--sidebar-w);
-    background: var(--surface);
+    background: var(--bg);
     display: flex;
     flex-direction: column;
     z-index: 100;
@@ -680,7 +680,6 @@ const GLOBAL_CSS = `
 
   .sidebar-sep {
     border: none;
-    border-top: 1px solid var(--border);
     margin: 4px 2px;
   }
 
@@ -848,8 +847,8 @@ const GLOBAL_CSS = `
   .launch-panel {
     display: flex;
     flex-direction: column;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    border: none;
     border-radius: var(--radius);
     padding: 10px 10px 6px;
     overflow-y: auto;
@@ -861,11 +860,11 @@ const GLOBAL_CSS = `
     font-size: 10px; font-weight: 700; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: 0.07em;
     padding-bottom: 8px; margin-bottom: 2px;
-    border-bottom: 1px solid var(--border); flex-shrink: 0;
+    border-bottom: none; flex-shrink: 0;
   }
   .launch-section {
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    border: none;
     border-radius: var(--radius-sm);
     padding: 8px 10px;
     flex-shrink: 0;
@@ -885,14 +884,14 @@ const GLOBAL_CSS = `
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    border: none;
     border-radius: var(--radius);
     padding: 12px;
     margin-bottom: 8px;
-    transition: border-color 0.15s;
+    transition: box-shadow 0.15s;
   }
-  .launch-prompt-wrap:focus-within { border-color: rgba(255,255,255,0.18); }
+  .launch-prompt-wrap:focus-within { box-shadow: 0 0 0 1px rgba(255,255,255,0.1); }
   .launch-prompt-wrap textarea {
     flex: 1;
     background: transparent;
@@ -913,14 +912,13 @@ const GLOBAL_CSS = `
     justify-content: flex-end;
     gap: 8px;
     padding-top: 8px;
-    border-top: 1px solid var(--border);
     margin-top: 8px;
     flex-shrink: 0;
   }
 
   /* Accordions */
   .acc-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; flex-shrink: 0; }
-  .acc-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .acc-item { background: rgba(255,255,255,0.03); border: none; border-radius: var(--radius-sm); overflow: hidden; }
   .acc-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 9px 14px; cursor: pointer; user-select: none;
@@ -947,7 +945,7 @@ const GLOBAL_CSS = `
   /* Toggle switches (OpenAI-style) */
   .toggle-row {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 9px 0; border-bottom: 1px solid var(--border-sub); gap: 16px; cursor: pointer;
+    padding: 9px 0; gap: 16px; cursor: pointer;
   }
   .toggle-row:last-child { border-bottom: none; }
   .toggle-row label { cursor: pointer; }
@@ -979,7 +977,7 @@ const GLOBAL_CSS = `
   .acc-form-row .fg input,
   .acc-form-row .fg select {
     width: 100%; padding: 7px 11px; font-size: 13px;
-    background: var(--bg); border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
     border-radius: 10px; color: var(--text); outline: none; font-family: inherit;
     transition: border-color 0.15s, box-shadow 0.15s;
   }
@@ -995,7 +993,7 @@ const GLOBAL_CSS = `
   /* ── Typography ──────────────────────────────────────────────── */
   h1 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
   h2 { font-size: 15px; font-weight: 600; color: var(--text); margin: 24px 0 10px;
-       padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+       padding-bottom: 6px; }
   h3 { font-size: 13px; font-weight: 600; color: var(--text); margin: 16px 0 8px; }
   h4 { font-size: 12px; font-weight: 600; color: var(--text-muted); margin: 12px 0 6px; }
   p  { margin: 6px 0; color: var(--text-muted); font-size: 13px; }
@@ -1008,8 +1006,8 @@ const GLOBAL_CSS = `
 
   /* ── Cards ───────────────────────────────────────────────────── */
   .card {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    border: none;
     border-radius: var(--radius);
     padding: 18px 20px;
     margin: 12px 0;
@@ -1026,10 +1024,9 @@ const GLOBAL_CSS = `
     display: flex;
     gap: 10px;
     padding: 6px 0;
-    border-bottom: 1px solid var(--border-sub);
     font-size: 13px;
   }
-  .card-row:last-child { border-bottom: none; }
+  .card-row:last-child { }
   .card-label { color: var(--text-muted); min-width: 150px; flex-shrink: 0; }
   .card-value { color: var(--text); word-break: break-all; }
 
@@ -1120,8 +1117,8 @@ const GLOBAL_CSS = `
   input[type="url"],
   select,
   textarea {
-    background: var(--surface-2);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: 10px;
     color: var(--text);
     font-size: 13px;
@@ -1136,12 +1133,12 @@ const GLOBAL_CSS = `
   input[type="url"]:focus,
   select:focus,
   textarea:focus {
-    border-color: rgba(255,255,255,0.25);
-    box-shadow: 0 0 0 2px rgba(16,163,127,0.18);
+    border-color: rgba(255,255,255,0.18);
+    box-shadow: 0 0 0 2px rgba(16,163,127,0.15);
   }
   input:hover:not(:focus),
   select:hover:not(:focus),
-  textarea:hover:not(:focus) { border-color: rgba(255,255,255,0.18); }
+  textarea:hover:not(:focus) { border-color: rgba(255,255,255,0.13); }
   input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 0.6; }
   select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238b8b9e'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; cursor: pointer; }
   textarea { min-height: 100px; resize: vertical; font-family: var(--font-mono); line-height: 1.5; }
@@ -1214,9 +1211,8 @@ const GLOBAL_CSS = `
     gap: 12px;
     font-size: 12px;
     padding: 7px 0;
-    border-bottom: 1px solid var(--border-sub);
   }
-  .iter-row:last-child { border-bottom: none; }
+  .iter-row:last-child { }
   .iter-num  { color: var(--text-muted); width: 28px; flex-shrink: 0; font-family: var(--font-mono); }
   .iter-dur  { color: var(--text-muted); width: 55px; flex-shrink: 0; }
   .iter-ok   { color: var(--success); width: 16px; flex-shrink: 0; }
@@ -1494,9 +1490,9 @@ const GLOBAL_CSS = `
 
   /* ── Project info card ───────────────────────────────────────── */
   .project-card {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
+    background: rgba(255,255,255,0.03);
+    border: none;
+    border-left: 2px solid var(--accent);
     border-radius: var(--radius);
     padding: 16px 18px;
     margin-top: 10px;
@@ -1542,8 +1538,8 @@ const GLOBAL_CSS = `
   }
   .dir-modal-overlay.open { display: flex; }
   .dir-modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: #0d0d0d;
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: var(--radius);
     width: 520px;
     max-width: 94vw;
@@ -1551,11 +1547,10 @@ const GLOBAL_CSS = `
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
   }
   .dir-modal-header {
     padding: 14px 18px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1575,8 +1570,8 @@ const GLOBAL_CSS = `
   .dir-modal-close:hover { color: var(--text); }
   .dir-modal-path {
     padding: 8px 16px;
-    background: var(--surface-2);
-    border-bottom: 1px solid var(--border-sub);
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-muted);
@@ -1601,13 +1596,13 @@ const GLOBAL_CSS = `
     user-select: none;
     transition: background 0.1s;
   }
-  .dir-item:hover { background: var(--surface-2); }
+  .dir-item:hover { background: rgba(255,255,255,0.04); }
   .dir-item-icon { flex-shrink: 0; font-size: 14px; }
   .dir-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir-item-up { color: var(--text-muted); }
   .dir-modal-footer {
     padding: 12px 16px;
-    border-top: 1px solid var(--border-sub);
+    border-top: 1px solid rgba(255,255,255,0.04);
     display: flex;
     gap: 8px;
     align-items: center;
