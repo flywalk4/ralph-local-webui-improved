@@ -2048,7 +2048,9 @@ function buildPrompt(state: RalphState, _agent: AgentConfig, gitIssues: string[]
   // Testing mode: use the prompt as-is — no plan injection, no loop boilerplate, no tasks section.
   // The testing/fixing prompts are self-contained and adding the standard template on top
   // creates conflicting instruction sets that confuse the agent.
-  if (state.testingMode) {
+  // Only activate this when we're actually IN the testing/fixing phase, not during the
+  // initial task that precedes testing (completionPromise is still "COMPLETE" then).
+  if (state.testingMode && (state.completionPromise === "TESTING_COMPLETE" || state.completionPromise === "FIXES_COMPLETE")) {
     const context = loadContext();
     const contextSection = context ? `\n\n## Additional Context (added by user mid-loop)\n\n${context}\n` : "";
     return `${state.prompt}${contextSection}`.trim();
