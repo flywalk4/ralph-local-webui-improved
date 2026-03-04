@@ -2977,6 +2977,10 @@ async function runRalphLoop(): Promise<void> {
       const abortDetected = abortPromise ? checkPromise(result, abortPromise) : false;
       const taskCompletionDetected = tasksMode ? checkPromise(result, taskPromise) : false;
 
+      // Capture snapshot early so completion gates can inspect filesModified
+      const snapshotAfter = await captureFileSnapshot();
+      const filesModified = getModifiedFilesSinceSnapshot(snapshotBefore, snapshotAfter);
+
       let completionDetected = completionSignalDetected;
       if (tasksMode && completionSignalDetected) {
         let tasksGatePassed = false;
@@ -2995,6 +2999,35 @@ async function runRalphLoop(): Promise<void> {
         }
       }
 
+      // Plan mode gate: require all tasks [x] AND real code changes
+      if (state.planMode && completionSignalDetected && completionDetected) {
+        const planFilePath = join(process.cwd(), "IMPLEMENTATION_PLAN.md");
+        let planGatePassed = false;
+        try {
+          if (existsSync(planFilePath)) {
+            const planContent = readFileSync(planFilePath, "utf-8");
+            planGatePassed = tasksMarkdownAllComplete(planContent);
+          }
+        } catch {
+          planGatePassed = false;
+        }
+
+        if (!planGatePassed) {
+          completionDetected = false;
+          console.warn(`\n⚠️  Completion promise ignored: IMPLEMENTATION_PLAN.md still has incomplete tasks.`);
+        } else if (filesModified.length > 0) {
+          // If files were written, at least one must be a real code file (not just plan/activity metadata)
+          const planOnlyFiles = new Set(["IMPLEMENTATION_PLAN.md", "activity.md"]);
+          const realWorkDone = filesModified.some(
+            f => !planOnlyFiles.has(f.replace(/\\/g, "/").split("/").pop()!)
+          );
+          if (!realWorkDone) {
+            completionDetected = false;
+            console.warn(`\n⚠️  Completion promise ignored: only plan/activity files were updated — no code changes detected.`);
+          }
+        }
+      }
+
       const iterationDuration = Date.now() - iterationStart;
 
       printIterationSummary({
@@ -3007,9 +3040,6 @@ async function runRalphLoop(): Promise<void> {
         model: currentModel,
       });
 
-      // Track iteration history - compare against pre-iteration snapshot
-      const snapshotAfter = await captureFileSnapshot();
-      const filesModified = getModifiedFilesSinceSnapshot(snapshotBefore, snapshotAfter);
       const errors = extractErrors(combinedOutput);
 
       const iterationRecord: IterationHistory = {

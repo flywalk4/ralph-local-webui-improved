@@ -96,7 +96,7 @@ file contents here
 
 Output the completion signal from the task when you are done. Do not output it early.`;
 
-// ── Call the API ─────────────────────────────────────────────────────────────
+// ── Call the API (streaming to avoid idle-connection timeouts) ────────────────
 
 const endpoint = `${apiBase}/chat/completions`;
 let responseText = "";
@@ -108,13 +108,14 @@ try {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
+    signal: AbortSignal.timeout(60 * 60 * 1000), // 60 minutes
     body: JSON.stringify({
       model: resolvedModel,
       messages: [
         { role: "system", content: optimizeMode ? SYSTEM_PROMPT_OPTIMIZED : SYSTEM_PROMPT },
         { role: "user", content: message },
       ],
-      stream: false,
+      stream: true,
     }),
   });
 
@@ -124,17 +125,46 @@ try {
     process.exit(1);
   }
 
-  const data = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
-    error?: { message: string };
-  };
-
-  if (data.error) {
-    console.error(`API error: ${data.error.message}`);
+  if (!response.body) {
+    console.error("API error: empty response body");
     process.exit(1);
   }
 
-  responseText = data.choices?.[0]?.message?.content ?? "";
+  // Read Server-Sent Events and accumulate the full response
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  outer: while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE lines are separated by "\n" — process complete lines
+    let newline: number;
+    while ((newline = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+
+      if (!line.startsWith("data:")) continue;
+      const raw = line.slice(5).trim();
+      if (raw === "[DONE]") break outer;
+
+      let chunk: { choices?: Array<{ delta?: { content?: string }; finish_reason?: string }> };
+      try {
+        chunk = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (delta) {
+        responseText += delta;
+        // Stream tokens to stderr so Ralph's "last activity" timer stays fresh
+        process.stderr.write(delta);
+      }
+    }
+  }
 } catch (err) {
   console.error(`Failed to connect to ${endpoint}: ${err}`);
   process.exit(1);
